@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Scanner Caisse</string>
+
+    <!-- Navigation -->
+    <string name="nav_checkout">Caisse</string>
+    <string name="nav_products">Produits</string>
+    <string name="nav_categories">Catégories</string>
+    <string name="nav_settings">Paramètres</string>
+
+    <!-- Checkout -->
+    <string name="checkout_new_channel">Nouveau canal</string>
+    <string name="checkout_rename_channel">Renommer</string>
+    <string name="checkout_close_channel">Fermer</string>
+    <string name="checkout_print_ticket">Imprimer le ticket</string>
+    <string name="checkout_total">TOTAL</string>
+    <string name="checkout_empty">Scanne un produit avec le bouton latéral.</string>
+    <string name="checkout_unknown_product">Produit inconnu — créer ?</string>
+
+    <!-- Products -->
+    <string name="product_barcode">Code-barres</string>
+    <string name="product_category">Catégorie</string>
+    <string name="product_price">Prix (€)</string>
+    <string name="product_add">Ajouter le produit</string>
+
+    <!-- Categories -->
+    <string name="category_name">Nom de la catégorie</string>
+    <string name="category_add">Ajouter la catégorie</string>
+
+    <!-- Settings -->
+    <string name="settings_shop_name">Nom du commerce</string>
+    <string name="settings_printer_ip">IP de l\'imprimante</string>
+    <string name="settings_printer_port">Port</string>
+    <string name="settings_scanner_action">Action broadcast du scanner</string>
+    <string name="settings_scanner_extra">Nom de l\'extra (donnée scannée)</string>
+    <string name="settings_save">Enregistrer</string>
+    <string name="settings_test_print">Test imprimante</string>
+</resources>
