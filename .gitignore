@@ -10,3 +10,10 @@ captures/
 *.aab
 *.ap_
 *.dex
+
+# pc-listener Python
+pc-listener/.venv/
+pc-listener/build/
+pc-listener/dist/
+pc-listener/__pycache__/
+pc-listener/*.spec

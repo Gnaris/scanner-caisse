@@ -3,14 +3,20 @@ package com.belijolie.scanner
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -60,7 +66,14 @@ private fun AppRoot() {
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
+            // NavigationBar par défaut = 80.dp — trop haut pour un PDA. On
+            // compresse à 54 dp (sans label) et on force une icône 20 dp pour
+            // libérer de la place sur l'écran de caisse.
+            NavigationBar(
+                modifier = Modifier.height(54.dp),
+                windowInsets = WindowInsets(0),
+                tonalElevation = 2.dp
+            ) {
                 Destination.entries.forEach { dest ->
                     NavigationBarItem(
                         selected = currentRoute == dest.route,
@@ -73,8 +86,18 @@ private fun AppRoot() {
                                 }
                             }
                         },
-                        icon = { Icon(dest.icon, contentDescription = dest.label) },
-                        label = { Text(dest.label) }
+                        icon = {
+                            Icon(
+                                dest.icon,
+                                contentDescription = dest.label,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        label = {
+                            Text(dest.label, fontSize = 10.sp, maxLines = 1)
+                        },
+                        alwaysShowLabel = true,
+                        colors = NavigationBarItemDefaults.colors()
                     )
                 }
             }

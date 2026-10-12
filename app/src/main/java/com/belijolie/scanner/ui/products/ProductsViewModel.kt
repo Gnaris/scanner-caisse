@@ -32,12 +32,19 @@ class ProductsViewModel(
 
     fun add(barcode: String, categoryId: Long, priceCents: Int) {
         viewModelScope.launch {
+            val cleaned = barcode.trim()
+            if (cleaned.isEmpty()) return@launch
+            val existing = db.productDao().findByBarcode(cleaned)
+            if (existing != null) {
+                _error.value = "Un produit avec le code-barres « $cleaned » existe déjà (${existing.category.name})."
+                return@launch
+            }
             runCatching {
                 db.productDao().insert(
-                    Product(barcode = barcode.trim(), categoryId = categoryId, priceCents = priceCents)
+                    Product(barcode = cleaned, categoryId = categoryId, priceCents = priceCents)
                 )
             }.onFailure {
-                _error.value = "Impossible d'ajouter : code-barres déjà utilisé ?"
+                _error.value = "Impossible d'ajouter : code-barres déjà utilisé."
             }
         }
     }

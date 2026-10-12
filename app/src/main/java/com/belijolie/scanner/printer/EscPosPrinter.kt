@@ -35,15 +35,14 @@ object EscPosPrinter {
     // Interior width available for the table.
     private const val INNER_WIDTH = CHARS_PER_LINE - 2 * SIDE_PAD  // = 42
 
-    // Column widths. Sum including 5 separators must equal INNER_WIDTH (42).
-    //   Cat 11 + sp + Qt 2 + sp + PU 5 + sp + HT 5 + sp + TVA 5 + sp + TTC 7
-    //   = 11+2+5+5+5+7 + 5 = 42 ✓
-    private const val COL_CAT = 11
-    private const val COL_QT = 2
-    private const val COL_PU = 5
-    private const val COL_HT = 5
-    private const val COL_TVA = 5
-    private const val COL_TTC = 7
+    // Column widths. Sum including 3 separators must equal INNER_WIDTH (42).
+    //   Cat 18 + sp + Qt 4 + sp + PU 8 + sp + HT 9  = 18+4+8+9 + 3 = 42 ✓
+    // TVA et TTC sont calculés en bas de ticket (lignes totaux) mais plus
+    // affichés par ligne pour aérer et élargir la colonne catégorie.
+    private const val COL_CAT = 18
+    private const val COL_QT = 4
+    private const val COL_PU = 8
+    private const val COL_HT = 9
 
     private val PAD = " ".repeat(SIDE_PAD)
     private val DIVIDER = PAD + "-".repeat(INNER_WIDTH) + PAD
@@ -78,8 +77,12 @@ object EscPosPrinter {
                 )
                 PrinterTextParserImg.bitmapToHexadecimalString(printer, bitmap)
             } else null
+            val reviewSectionHex = if (settings.googleReviewUrl.isNotBlank()) {
+                val bitmap = TicketImage.composeReviewQrSection(settings.googleReviewUrl)
+                PrinterTextParserImg.bitmapToHexadecimalString(printer, bitmap)
+            } else null
 
-            printer.printFormattedText(buildReceipt(settings, lines, qrSectionHex))
+            printer.printFormattedText(buildReceipt(settings, lines, qrSectionHex, reviewSectionHex))
             val cmds = printer.commands()
             cmds.feedPaper(500)
             cmds.cutPaper()
@@ -107,7 +110,8 @@ object EscPosPrinter {
     private fun buildReceipt(
         settings: AppSettings,
         lines: List<CartLine>,
-        qrSectionHex: String? = null
+        qrSectionHex: String? = null,
+        reviewSectionHex: String? = null
     ): String = buildString {
         val now = SimpleDateFormat("dd/MM/yyyy  HH:mm", Locale.FRANCE).format(Date())
 
@@ -134,7 +138,7 @@ object EscPosPrinter {
         append("[L]").append(DIVIDER).append('\n')
 
         // ---------- Table header ----------
-        append("[L]").append(tableRow("Cat", "Qt", "P.U.", "HT", "TVA", "TTC")).append('\n')
+        append("[L]").append(tableRow("Catégorie", "Qt", "P.U.", "HT")).append('\n')
         append("[L]").append(DIVIDER).append('\n')
 
         // ---------- Product rows ----------
@@ -165,14 +169,12 @@ object EscPosPrinter {
                 val row = if (idx == 0) {
                     tableRow(
                         chunk,
-                        line.quantity.toString(),
-                        formatPrice(line.unitPriceCents),
-                        formatPrice(lineHt),
-                        formatPrice(lineTva),
-                        formatPrice(lineTtc)
+                        "x" + line.quantity,
+                        formatPrice(line.unitPriceCents) + "€",
+                        formatPrice(lineHt) + "€"
                     )
                 } else {
-                    tableRow(chunk, "", "", "", "", "")
+                    tableRow(chunk, "", "", "")
                 }
                 if (bold) append("[L]<b>").append(row).append("</b>\n")
                 else append("[L]").append(row).append('\n')
@@ -187,35 +189,40 @@ object EscPosPrinter {
         val totalHt = totalHtCents
 
         append("[L]").append(PAD).append("Quantité totale[R]")
-            .append(totalQty.toString()).append(PAD).append('\n')
+            .append("x").append(totalQty.toString()).append(PAD).append('\n')
         append("[L]").append(PAD).append("Total HT[R]")
-            .append(formatPrice(totalHt)).append(" EUR").append(PAD).append('\n')
+            .append(formatPrice(totalHt)).append(" €").append(PAD).append('\n')
         append("[L]").append(PAD).append("TVA totale (20%)[R]")
-            .append(formatPrice(totalTva)).append(" EUR").append(PAD).append('\n')
+            .append(formatPrice(totalTva)).append(" €").append(PAD).append('\n')
         append("[L]").append(PAD).append("<b>Total TTC[R]")
-            .append(formatPrice(totalTtcCents)).append(" EUR</b>").append(PAD).append('\n')
+            .append(formatPrice(totalTtcCents)).append(" €</b>").append(PAD).append('\n')
 
         // ---------- Microstore + Boutique en ligne (QR codes side by side) ----------
         if (qrSectionHex != null) {
             append("[L]").append(DIVIDER).append('\n')
-            // [L] alignment on the <img> tag anchors the image to the LEFT of
-            // the paper rather than centering it — matches the user's request
-            // to shift the QR block visually to the left.
-            append("[L]<img>").append(qrSectionHex).append("</img>\n")
+            // [C] = l'imprimante centre l'image sur la zone imprimable. Combiné
+            // avec un bitmap qui fait exactement la largeur imprimable (576 px
+            // dans TicketImage), les deux QR tombent pile sur les quarts du
+            // papier → centrage symétrique garanti.
+            append("[C]<img>").append(qrSectionHex).append("</img>\n")
+        }
+
+        // ---------- Avis Google (bloc d'appel à l'action centré) ----------
+        if (reviewSectionHex != null) {
+            append("[L]").append(DIVIDER).append('\n')
+            append("[C]<img>").append(reviewSectionHex).append("</img>\n")
         }
 
         // Minimal padding — the explicit feedPaper(500) handles the cut cushion.
         append(blankLines(3))
     }
 
-    private fun tableRow(cat: String, qt: String, pu: String, ht: String, tva: String, ttc: String): String {
+    private fun tableRow(cat: String, qt: String, pu: String, ht: String): String {
         val catCol = cat.take(COL_CAT).padEnd(COL_CAT)
         val qtCol = qt.padStart(COL_QT)
         val puCol = pu.padStart(COL_PU)
         val htCol = ht.padStart(COL_HT)
-        val tvaCol = tva.padStart(COL_TVA)
-        val ttcCol = ttc.padStart(COL_TTC)
-        return "$PAD$catCol $qtCol $puCol $htCol $tvaCol $ttcCol$PAD"
+        return "$PAD$catCol $qtCol $puCol $htCol$PAD"
     }
 
     private fun blankLines(n: Int): String = "\n".repeat(n)

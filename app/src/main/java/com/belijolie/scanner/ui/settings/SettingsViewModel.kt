@@ -7,6 +7,7 @@ import com.belijolie.scanner.ScannerApp
 import com.belijolie.scanner.data.AppSettings
 import com.belijolie.scanner.data.SettingsStore
 import com.belijolie.scanner.printer.EscPosPrinter
+import com.belijolie.scanner.util.toHumanMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -34,8 +35,9 @@ class SettingsViewModel(private val store: SettingsStore) : ViewModel() {
         viewModelScope.launch {
             val s = store.settings.first()
             val result = runCatching { EscPosPrinter.printTest(s.printerIp, s.printerPort) }
+            val ctx = ScannerApp.instance.applicationContext
             _toast.value = if (result.isSuccess) "Test envoyé à ${s.printerIp}:${s.printerPort}"
-            else "Échec : ${result.exceptionOrNull()?.message ?: "erreur inconnue"}"
+            else "Échec : ${result.exceptionOrNull()?.toHumanMessage(ctx) ?: "erreur inconnue"}"
         }
     }
 

@@ -3,6 +3,7 @@ package com.belijolie.scanner.ui.checkout
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,18 +14,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,11 +42,12 @@ import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
 
 /**
- * Modal to manually add a product line to the active channel.
+ * Modal pour ajouter manuellement une ligne au canal actif.
  *
- * Category source is user's choice:
- *   - pick an existing one via the dropdown
- *   - or type a free-text category (useful for one-offs that don't warrant a DB entry)
+ * Design simplifié : un SEUL champ pour la catégorie (saisie libre) + une
+ * rangée de chips cliquables au-dessus pour sélectionner rapidement une
+ * catégorie existante. Taper dedans crée une nouvelle catégorie à la volée
+ * si elle n'existe pas (après validation côté caller).
  */
 @Composable
 fun AddManualProductSheet(
@@ -91,10 +90,26 @@ fun AddManualProductSheet(
                 }
                 Spacer(Modifier.height(12.dp))
 
-                CategoryPicker(
-                    categories = categories,
+                if (categories.isNotEmpty()) {
+                    Text(
+                        "Catégories existantes",
+                        fontSize = 11.sp,
+                        color = Color.Gray
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    CategoryChipsRow(
+                        categories = categories,
+                        selected = categoryText,
+                        onPick = { categoryText = it.name }
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                AppTextField(
                     value = categoryText,
-                    onValueChange = { categoryText = it }
+                    onValueChange = { categoryText = it },
+                    label = "Catégorie (choisir ou taper)",
+                    mode = KeyboardMode.TEXT
                 )
                 Spacer(Modifier.height(12.dp))
 
@@ -132,71 +147,50 @@ fun AddManualProductSheet(
 }
 
 @Composable
-private fun CategoryPicker(
+private fun CategoryChipsRow(
     categories: List<Category>,
-    value: String,
-    onValueChange: (String) -> Unit
+    selected: String,
+    onPick: (Category) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        categories.forEach { c ->
+            val isSelected = c.name.equals(selected.trim(), ignoreCase = true)
+            CategoryChip(
+                label = c.name,
+                selected = isSelected,
+                onClick = { onPick(c) }
+            )
+        }
+    }
+}
 
-    Column {
+@Composable
+private fun CategoryChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val bg = if (selected) Color(0xFF4F46E5) else Color.White
+    val fg = if (selected) Color.White else Color(0xFF111111)
+    val border = if (selected) Color(0xFF4F46E5) else Color(0xFFD1D5DB)
+    Box(
+        modifier = Modifier
+            .background(bg, RoundedCornerShape(20.dp))
+            .border(1.dp, border, RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+    ) {
         Text(
-            "Catégorie (choisir ou taper)",
-            fontSize = 12.sp,
-            color = Color.Gray
+            label,
+            color = fg,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
         )
-        Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .background(Color.White, RoundedCornerShape(8.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
-                    .clickable { expanded = true }
-                    .padding(horizontal = 14.dp, vertical = 14.dp)
-            ) {
-                Text(
-                    value.ifEmpty { if (categories.isEmpty()) "— Taper le nom —" else "— Choisir ou taper —" },
-                    fontSize = 16.sp,
-                    color = if (value.isEmpty()) Color.Gray else Color.Black
-                )
-            }
-            Spacer(Modifier.padding(start = 6.dp))
-            // Free-text alternative: opens the AZERTY keyboard directly.
-            AppTextField(
-                value = value,
-                onValueChange = onValueChange,
-                label = "Saisir",
-                mode = KeyboardMode.TEXT,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            if (categories.isEmpty()) {
-                DropdownMenuItem(
-                    text = { Text("Aucune catégorie — tape le nom à droite", color = Color.Gray) },
-                    onClick = { expanded = false }
-                )
-            } else {
-                categories.forEach { c ->
-                    DropdownMenuItem(
-                        text = { Text(c.name) },
-                        onClick = {
-                            onValueChange(c.name)
-                            expanded = false
-                        }
-                    )
-                }
-            }
-            HorizontalDivider()
-            DropdownMenuItem(
-                text = { Text("Effacer", color = Color(0xFFE11D48)) },
-                onClick = {
-                    onValueChange("")
-                    expanded = false
-                }
-            )
-        }
     }
 }
 

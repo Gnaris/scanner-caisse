@@ -24,7 +24,14 @@ class CategoriesViewModel(private val db: AppDatabase) : ViewModel() {
 
     fun add(name: String) {
         viewModelScope.launch {
-            runCatching { db.categoryDao().insert(Category(name = name.trim())) }
+            val cleaned = name.trim()
+            if (cleaned.isEmpty()) return@launch
+            val existing = db.categoryDao().findByName(cleaned)
+            if (existing != null) {
+                _error.value = "La catégorie « ${existing.name} » existe déjà."
+                return@launch
+            }
+            runCatching { db.categoryDao().insert(Category(name = cleaned)) }
                 .onFailure { _error.value = "Impossible d'ajouter cette catégorie." }
         }
     }
@@ -38,8 +45,15 @@ class CategoriesViewModel(private val db: AppDatabase) : ViewModel() {
 
     fun rename(category: Category, newName: String) {
         viewModelScope.launch {
+            val cleaned = newName.trim()
+            if (cleaned.isEmpty() || cleaned.equals(category.name, ignoreCase = true)) return@launch
+            val existing = db.categoryDao().findByName(cleaned)
+            if (existing != null && existing.id != category.id) {
+                _error.value = "Une catégorie « ${existing.name} » existe déjà."
+                return@launch
+            }
             runCatching {
-                db.categoryDao().update(category.copy(name = newName.trim()))
+                db.categoryDao().update(category.copy(name = cleaned))
             }.onFailure {
                 _error.value = "Impossible de renommer : nom déjà utilisé ?"
             }

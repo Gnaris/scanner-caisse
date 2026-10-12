@@ -3,9 +3,13 @@ package com.belijolie.scanner.ui.keyboard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,11 +19,13 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,18 +33,31 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import android.view.WindowManager
 import com.belijolie.scanner.scanner.ScanEventBus
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 enum class KeyboardMode {
     /** Digits 0-9 only. For barcodes, port numbers. */
@@ -84,31 +103,80 @@ fun AppTextField(
 
     if (sheetOpen) {
         KeyboardDialog(
-            initialValue = value,
+            value = value,
             label = label,
             mode = mode,
-            onDismiss = { sheetOpen = false },
-            onValidate = {
-                onValueChange(it)
-                sheetOpen = false
-            }
+            onChange = onValueChange,
+            onDismiss = { sheetOpen = false }
         )
     }
 }
 
 @Composable
 private fun KeyboardDialog(
-    initialValue: String,
+    value: String,
     label: String,
     mode: KeyboardMode,
-    onDismiss: () -> Unit,
-    onValidate: (String) -> Unit
+    onChange: (String) -> Unit,
+    onDismiss: () -> Unit
 ) {
-    var text by remember { mutableStateOf(initialValue) }
+    // The text itself lives in the parent (via `value`), so key presses update
+    // the parent state immediately — no need to tap "Valider" to flush. We keep
+    // selection locally and clamp it against the current value (which may have
+    // been reshaped by the parent, e.g. digit-only filters).
+    var selection by remember { mutableStateOf(TextRange(value.length)) }
+    val clampedSel = TextRange(
+        selection.start.coerceIn(0, value.length),
+        selection.end.coerceIn(0, value.length)
+    )
+    val tfv = TextFieldValue(value, clampedSel)
+
     var currentMode by remember { mutableStateOf(mode) }
+    val focusRequester = remember { FocusRequester() }
+    val localView = LocalView.current
+
+    // Masquer l'IME SYSTÈME sur la fenêtre de ce Dialog : on utilise notre
+    // propre clavier, mais on garde readOnly=false sur le BasicTextField pour
+    // que le curseur, les poignées de sélection bleues et le menu natif
+    // (Tout sélectionner / Copier / Coller) s'affichent correctement.
+    LaunchedEffect(Unit) {
+        val dialogWindow = (localView.parent as? DialogWindowProvider)?.window
+        dialogWindow?.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN or
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+        )
+    }
+
+    val insert: (String) -> Unit = insert@{ s ->
+        if (s.isEmpty()) return@insert
+        val start = minOf(clampedSel.start, clampedSel.end)
+        val end = maxOf(clampedSel.start, clampedSel.end)
+        val newText = value.substring(0, start) + s + value.substring(end)
+        selection = TextRange(start + s.length)
+        onChange(newText)
+    }
+    val backspace: () -> Unit = backspace@{
+        val start = minOf(clampedSel.start, clampedSel.end)
+        val end = maxOf(clampedSel.start, clampedSel.end)
+        if (start != end) {
+            val newText = value.substring(0, start) + value.substring(end)
+            selection = TextRange(start)
+            onChange(newText)
+            return@backspace
+        }
+        if (start == 0) return@backspace
+        val newText = value.substring(0, start - 1) + value.substring(start)
+        selection = TextRange(start - 1)
+        onChange(newText)
+    }
 
     LaunchedEffect(Unit) {
-        ScanEventBus.events.collect { scanned -> text = scanned }
+        // Scanner events overwrite the full value (we don't want partial scans
+        // interleaved with manual input).
+        ScanEventBus.events.collect { scanned ->
+            selection = TextRange(scanned.length)
+            onChange(scanned)
+        }
     }
 
     Dialog(
@@ -124,6 +192,13 @@ private fun KeyboardDialog(
                 .fillMaxSize()
                 .onPreviewKeyEvent { event ->
                     event.nativeKeyEvent.keyCode != android.view.KeyEvent.KEYCODE_BACK
+                }
+                .background(Color.Black.copy(alpha = 0.45f))
+                // detectTapGestures ne vole PAS le focus du BasicTextField
+                // (contrairement à clickable) → la sélection par long-press
+                // reste intacte, et un tap simple hors du panneau ferme bien.
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { onDismiss() })
                 },
             contentAlignment = Alignment.BottomCenter
         ) {
@@ -133,9 +208,33 @@ private fun KeyboardDialog(
                     .background(Color(0xFFF4F5F7))
                     .navigationBarsPadding()
                     .padding(horizontal = 6.dp, vertical = 8.dp)
+                    // Absorbe les taps sur le panneau pour qu'ils n'atteignent
+                    // pas le Box parent (qui dismiss). Pas de clickable → pas
+                    // de focus volé au TextField.
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = {})
+                    }
             ) {
-                Text(label, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = Color(0xFF6B7280))
-                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        label,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp,
+                        color = Color(0xFF6B7280),
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Fermer la saisie",
+                            tint = Color(0xFF6B7280)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -143,65 +242,88 @@ private fun KeyboardDialog(
                         .border(1.dp, Color(0xFFD1D5DB), RoundedCornerShape(8.dp))
                         .padding(horizontal = 14.dp, vertical = 14.dp)
                 ) {
-                    Text(
-                        text.ifEmpty { " " },
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF111111)
+                    BasicTextField(
+                        value = tfv,
+                        onValueChange = { newTfv ->
+                            selection = newTfv.selection
+                            if (newTfv.text != value) onChange(newTfv.text)
+                        },
+                        // readOnly = false → curseur bleu visible, poignées de
+                        // sélection bleues, menu natif Tout sélectionner /
+                        // Copier / Coller actif. L'IME système est bloquée par
+                        // SOFT_INPUT_STATE_ALWAYS_HIDDEN sur la fenêtre du
+                        // Dialog, donc notre clavier reste le seul utilisé.
+                        readOnly = false,
+                        textStyle = TextStyle(
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF111111)
+                        ),
+                        cursorBrush = SolidColor(Color(0xFF4F46E5)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester)
                     )
                 }
+                LaunchedEffect(Unit) { focusRequester.requestFocus() }
                 Spacer(Modifier.height(10.dp))
 
                 val canSwitchToAzerty = mode == KeyboardMode.TEXT || mode == KeyboardMode.SYMBOLS
                 when (currentMode) {
                     KeyboardMode.NUMBER -> NumericPad(
                         dotMode = DotMode.NONE,
-                        onChar = { text += it },
-                        onBackspace = { text = text.dropLast(1) },
+                        onChar = { insert(it.toString()) },
+                        onBackspace = backspace,
                         canAddDot = { false },
                         canSwitchToAzerty = canSwitchToAzerty,
                         onSwitchToAzerty = { currentMode = KeyboardMode.TEXT }
                     )
                     KeyboardMode.DECIMAL -> NumericPad(
                         dotMode = DotMode.SINGLE,
-                        onChar = { text += it },
-                        onBackspace = { text = text.dropLast(1) },
-                        canAddDot = { !text.contains('.') },
+                        onChar = { insert(it.toString()) },
+                        onBackspace = backspace,
+                        canAddDot = { !value.contains('.') },
                         canSwitchToAzerty = canSwitchToAzerty,
                         onSwitchToAzerty = { currentMode = KeyboardMode.TEXT }
                     )
                     KeyboardMode.IP -> NumericPad(
                         dotMode = DotMode.MULTIPLE,
-                        onChar = { text += it },
-                        onBackspace = { text = text.dropLast(1) },
+                        onChar = { insert(it.toString()) },
+                        onBackspace = backspace,
                         canAddDot = { true },
                         canSwitchToAzerty = canSwitchToAzerty,
                         onSwitchToAzerty = { currentMode = KeyboardMode.TEXT }
                     )
                     KeyboardMode.TEXT -> AzertyPad(
-                        onChar = { text += it },
-                        onBackspace = { text = text.dropLast(1) },
-                        onSpace = { text += ' ' },
+                        onChar = { insert(it.toString()) },
+                        onBackspace = backspace,
+                        onSpace = { insert(" ") },
                         onSwitchToSymbols = { currentMode = KeyboardMode.SYMBOLS }
                     )
                     KeyboardMode.SYMBOLS -> SymbolsPad(
-                        onChar = { text += it },
-                        onBackspace = { text = text.dropLast(1) },
-                        onSpace = { text += ' ' },
+                        onChar = { insert(it.toString()) },
+                        onBackspace = backspace,
+                        onSpace = { insert(" ") },
                         onSwitchToAzerty = { currentMode = KeyboardMode.TEXT }
                     )
                 }
 
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(6.dp))
+                // Bouton Entrée : la valeur est déjà sync en direct → juste
+                // fermer le clavier. Même rôle qu'un "Return" sur mobile.
                 Button(
-                    onClick = { onValidate(text) },
-                    shape = RoundedCornerShape(10.dp),
+                    onClick = onDismiss,
+                    shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
-                    modifier = Modifier.fillMaxWidth().height(54.dp)
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier.fillMaxWidth().height(44.dp).focusProperties { canFocus = false }
                 ) {
-                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White)
-                    Spacer(Modifier.size(8.dp))
-                    Text("Valider", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                    Text(
+                        "Entrée ⏎",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }
@@ -239,7 +361,7 @@ private fun NumericPad(
                 KeyButton(".", modifier = Modifier.weight(1f), enabled = canAddDot(), onClick = { onChar('.') })
             }
             KeyButton("0", modifier = Modifier.weight(1f), onClick = { onChar('0') })
-            BackspaceButton(modifier = Modifier.weight(1f), onClick = onBackspace)
+            BackspaceButton(modifier = Modifier.weight(1f), onDelete = onBackspace)
         }
         if (canSwitchToAzerty) {
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
@@ -256,7 +378,8 @@ private fun AzertyPad(
     onSpace: () -> Unit,
     onSwitchToSymbols: () -> Unit
 ) {
-    var shift by remember { mutableStateOf(true) }
+    // Minuscules par défaut (demandé) ; Shift reste disponible via la touche ⇧.
+    var shift by remember { mutableStateOf(false) }
     val letterRows = listOf("AZERTYUIOP", "QSDFGHJKLM", "WXCVBN")
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -285,7 +408,7 @@ private fun AzertyPad(
             // Few extra punctuation keys to fill the row
             KeyButton(",", modifier = Modifier.weight(1f), onClick = { onChar(',') })
             KeyButton(".", modifier = Modifier.weight(1f), onClick = { onChar('.') })
-            BackspaceButton(modifier = Modifier.weight(1.5f), onClick = onBackspace)
+            BackspaceButton(modifier = Modifier.weight(1.5f), onDelete = onBackspace)
         }
         // Bottom controls
         Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.fillMaxWidth()) {
@@ -340,7 +463,7 @@ private fun SymbolsPad(
                 onClick = { page = 1 - page }
             )
             SpaceButton(modifier = Modifier.weight(4f), onClick = onSpace)
-            BackspaceButton(modifier = Modifier.weight(1.5f), onClick = onBackspace)
+            BackspaceButton(modifier = Modifier.weight(1.5f), onDelete = onBackspace)
         }
     }
 }
@@ -367,20 +490,48 @@ private fun KeyButton(
             disabledContainerColor = KeyDisabled,
             disabledContentColor = Color.White.copy(alpha = 0.5f)
         ),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+        contentPadding = PaddingValues(0.dp),
         modifier = modifier.height(48.dp).focusProperties { canFocus = false }
     ) {
         Text(label, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
+/**
+ * Backspace with iPhone-style hold-to-repeat: single tap deletes once, holding
+ * the key keeps deleting after a short grace period, then faster while held.
+ *
+ * We drive both single and repeat deletes from the pressed state so the Button's
+ * own `onClick` can stay empty — one press = one `onDelete()` call, release
+ * cancels the follow-up repeat.
+ */
 @Composable
-private fun BackspaceButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun BackspaceButton(modifier: Modifier = Modifier, onDelete: () -> Unit) {
+    // rememberUpdatedState pour que le LaunchedEffect en cours (démarré au
+    // premier press) appelle toujours la DERNIÈRE version de `onDelete` —
+    // sinon il garde en closure une version figée au moment du press et
+    // continue à supprimer sur l'état obsolète : la boucle semble ne rien
+    // faire côté UI.
+    val latestOnDelete by rememberUpdatedState(onDelete)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+
+    LaunchedEffect(pressed) {
+        if (!pressed) return@LaunchedEffect
+        latestOnDelete()
+        delay(380)
+        while (isActive) {
+            latestOnDelete()
+            delay(50)
+        }
+    }
+
     Button(
-        onClick = onClick,
+        onClick = { /* handled via pressed state above */ },
+        interactionSource = interactionSource,
         shape = RoundedCornerShape(6.dp),
         colors = ButtonDefaults.buttonColors(containerColor = KeySpecialBg, contentColor = KeyText),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+        contentPadding = PaddingValues(0.dp),
         modifier = modifier.height(48.dp).focusProperties { canFocus = false }
     ) {
         Text("⌫", fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -393,7 +544,7 @@ private fun SpaceButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
         onClick = onClick,
         shape = RoundedCornerShape(6.dp),
         colors = ButtonDefaults.buttonColors(containerColor = KeyBg, contentColor = KeyText),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+        contentPadding = PaddingValues(0.dp),
         modifier = modifier.height(48.dp).focusProperties { canFocus = false }
     ) {
         Text("espace", fontSize = 13.sp)
@@ -409,7 +560,7 @@ private fun ShiftButton(on: Boolean, modifier: Modifier = Modifier, onClick: () 
             containerColor = if (on) KeySpecialBg else KeyBg,
             contentColor = KeyText
         ),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+        contentPadding = PaddingValues(0.dp),
         modifier = modifier.height(48.dp).focusProperties { canFocus = false }
     ) {
         Text("⇧", fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -422,9 +573,10 @@ private fun SpecialButton(label: String, modifier: Modifier = Modifier, onClick:
         onClick = onClick,
         shape = RoundedCornerShape(6.dp),
         colors = ButtonDefaults.buttonColors(containerColor = KeySpecialBg, contentColor = KeyText),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+        contentPadding = PaddingValues(0.dp),
         modifier = modifier.height(48.dp).focusProperties { canFocus = false }
     ) {
         Text(label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
     }
 }
+

@@ -13,8 +13,11 @@ import com.belijolie.scanner.data.SettingsStore
 import com.belijolie.scanner.data.entity.Category
 import com.belijolie.scanner.data.entity.Product
 import com.belijolie.scanner.data.entity.ProductWithCategory
+import com.belijolie.scanner.export.ChannelExporter
+import com.belijolie.scanner.export.ExportFormat
 import com.belijolie.scanner.printer.EscPosPrinter
 import com.belijolie.scanner.scanner.ScanEventBus
+import com.belijolie.scanner.util.toHumanMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -50,6 +53,12 @@ class CheckoutViewModel(
     private val _isPrinting = MutableStateFlow(false)
     val isPrinting: StateFlow<Boolean> = _isPrinting.asStateFlow()
 
+    private val _exportResult = MutableStateFlow<PrintResult?>(null)
+    val exportResult: StateFlow<PrintResult?> = _exportResult.asStateFlow()
+
+    private val _isExporting = MutableStateFlow(false)
+    val isExporting: StateFlow<Boolean> = _isExporting.asStateFlow()
+
     init {
         // Collect barcodes scanned anywhere in the app while this VM is alive.
         viewModelScope.launch {
@@ -83,11 +92,20 @@ class CheckoutViewModel(
 
     /**
      * Create a new category on the fly from the "unknown product" sheet.
-     * Returns the new category id so the caller can select it immediately.
+     * Returns the id of the created OR existing category (unicité par nom) so
+     * le caller peut la sélectionner directement sans que l'utilisateur ait à
+     * recommencer sa saisie.
      */
     fun createCategory(name: String, onCreated: (Long) -> Unit) {
         viewModelScope.launch {
-            val id = runCatching { db.categoryDao().insert(Category(name = name.trim())) }
+            val cleaned = name.trim()
+            if (cleaned.isEmpty()) return@launch
+            val existing = db.categoryDao().findByName(cleaned)
+            if (existing != null) {
+                onCreated(existing.id)
+                return@launch
+            }
+            val id = runCatching { db.categoryDao().insert(Category(name = cleaned)) }
                 .getOrNull() ?: return@launch
             onCreated(id)
         }
@@ -95,21 +113,63 @@ class CheckoutViewModel(
 
     fun dismissUnknown() { _unknownBarcode.value = null }
     fun clearPrintResult() { _printResult.value = null }
+    fun clearExportResult() { _exportResult.value = null }
+
+    fun exportChannel(id: String, format: ExportFormat) {
+        viewModelScope.launch {
+            val st = channelsRepo.current()
+            val channel = st.channels.firstOrNull { it.id == id } ?: return@launch
+            if (channel.lines.isEmpty()) {
+                _exportResult.value = PrintResult(false, "Panier vide")
+                return@launch
+            }
+            val settings: AppSettings = settingsStore.settings.first()
+            _isExporting.value = true
+            val result = ChannelExporter.exportChannel(settings, channel, format)
+            _isExporting.value = false
+            result.onSuccess { filename ->
+                _exportResult.value = PrintResult(true, "Export envoyé : $filename")
+            }.onFailure { e ->
+                val ctx = ScannerApp.instance.applicationContext
+                _exportResult.value = PrintResult(false, e.toHumanMessage(ctx))
+            }
+        }
+    }
 
     /**
      * Create a brand new product with the given barcode / category / price,
      * then add it to the active channel. Called from the "unknown product"
-     * sheet when the user picks "Create".
+     * sheet when the user picks "Create". Si un produit avec ce code-barre
+     * existe déjà, on le prend tel quel (pas de doublon ni d'erreur).
      */
     fun createAndAddToCart(barcode: String, categoryId: Long, priceCents: Int) {
         viewModelScope.launch {
+            val cleanedBarcode = barcode.trim()
+            if (cleanedBarcode.isEmpty()) return@launch
+
+            // Barcode unique au niveau DB → si déjà présent, on réutilise.
+            val existing = db.productDao().findByBarcode(cleanedBarcode)
+            if (existing != null) {
+                channelsRepo.addProductToActive(
+                    productId = existing.product.id,
+                    barcode = existing.product.barcode,
+                    categoryName = existing.category.name,
+                    priceCents = existing.product.priceCents
+                )
+                _unknownBarcode.value = null
+                return@launch
+            }
+
             val id = runCatching {
                 db.productDao().insert(
-                    Product(barcode = barcode.trim(), categoryId = categoryId, priceCents = priceCents)
+                    Product(barcode = cleanedBarcode, categoryId = categoryId, priceCents = priceCents)
                 )
-            }.getOrElse { return@launch }
+            }.getOrElse {
+                _printResult.value = PrintResult(false, "Impossible de créer le produit : code-barre déjà utilisé.")
+                return@launch
+            }
             val categoryName = db.categoryDao().getById(categoryId)?.name ?: return@launch
-            channelsRepo.addProductToActive(id, barcode.trim(), categoryName, priceCents)
+            channelsRepo.addProductToActive(id, cleanedBarcode, categoryName, priceCents)
             _unknownBarcode.value = null
         }
     }
@@ -195,8 +255,9 @@ class CheckoutViewModel(
                 channelsRepo.bumpTicketNumber()
                 _printResult.value = PrintResult(true, "Ticket imprimé")
             } else {
-                val msg = result.exceptionOrNull()?.message ?: "Erreur inconnue"
-                _printResult.value = PrintResult(false, "Impression KO : $msg")
+                val ctx = ScannerApp.instance.applicationContext
+                val msg = result.exceptionOrNull()?.toHumanMessage(ctx) ?: "Erreur inconnue"
+                _printResult.value = PrintResult(false, msg)
             }
         }
     }

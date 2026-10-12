@@ -1,0 +1,87 @@
+name: pc-listener release
+
+# Déclenchement : push d'un tag `pc-listener-v*` (ex. pc-listener-v1.0.1).
+# Produit l'exe PyInstaller et le publie dans une GitHub Release.
+# L'app installée chez les clients regarde cette release pour se mettre à jour.
+
+on:
+  push:
+    tags:
+      - 'pc-listener-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: pc-listener
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        shell: pwsh
+        run: |
+          # pc-listener-v1.2.3 → 1.2.3
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^pc-listener-v', ''
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "Version: $version"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: pc-listener/requirements.txt
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Inject version into listener.py
+        shell: pwsh
+        run: |
+          $v = "${{ steps.version.outputs.version }}"
+          $content = Get-Content listener.py -Raw
+          $content = $content -replace 'APP_VERSION = ".*?"', "APP_VERSION = `"$v`""
+          # Patche aussi le GITHUB_REPO si placeholder non remplacé localement.
+          $owner = "${{ github.repository_owner }}"
+          $repo  = "${{ github.event.repository.name }}"
+          $content = $content -replace 'GITHUB_REPO = "REPLACE_WITH.*?"', "GITHUB_REPO = `"$owner/$repo`""
+          Set-Content -Path listener.py -Value $content -Encoding UTF8 -NoNewline
+          Write-Host "---- Version header ----"
+          Select-String -Path listener.py -Pattern 'APP_VERSION|GITHUB_REPO' | Select-Object -First 2
+
+      - name: Build exe with PyInstaller
+        shell: pwsh
+        run: |
+          pyinstaller `
+            --noconfirm `
+            --onefile `
+            --windowed `
+            --name "ScannerListener" `
+            --hidden-import "PIL._tkinter_finder" `
+            listener.py
+
+      - name: Rename exe with version
+        shell: pwsh
+        run: |
+          $v = "${{ steps.version.outputs.version }}"
+          Move-Item dist\ScannerListener.exe "dist\ScannerListener-$v.exe"
+          Get-ChildItem dist\
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Scanner Listener v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            pc-listener/dist/ScannerListener-${{ steps.version.outputs.version }}.exe
+          # IMPORTANT: le nom du fichier DOIT finir par `.exe` — c'est ce que
+          # l'updater côté app détecte dans `assets[].browser_download_url`.

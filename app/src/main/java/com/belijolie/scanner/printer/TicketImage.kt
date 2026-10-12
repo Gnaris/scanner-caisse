@@ -19,15 +19,65 @@ import com.google.zxing.qrcode.QRCodeWriter
 object TicketImage {
 
     /**
-     * Total image width in pixels. Slightly less than the printable dot width
-     * (576 dots for 72 mm @ 203 DPI) so there is a visible margin on both sides.
+     * Largeur du bitmap = largeur imprimable du MUNBYN ITPP047 : 72 mm × 8 dots/mm
+     * = 576 dots. En conjonction avec `[C]<img>` dans EscPosPrinter, l'image est
+     * centrée pile sur la bande imprimée. Chaque QR est placé à WIDTH_PX/4 et
+     * WIDTH_PX*3/4 — centrés dans leur demi-bande, donc symétriques sur le papier.
      */
-    private const val WIDTH_PX = 512
+    private const val WIDTH_PX = 576
 
     private const val QR_PX = 180
     private const val PADDING = 8
     private const val TITLE_HEIGHT = 32
-    private const val FOOTER_HEIGHT = 28
+    private const val FOOTER_HEIGHT = 42
+
+    /**
+     * Section "Avis Google" imprimée en bas de ticket : titre d'invitation
+     * centré + QR centré + sous-titre. L'URL (ex. g.page/r/XXX/review) ouvre
+     * directement la page d'avis Google au scan.
+     */
+    fun composeReviewQrSection(url: String): Bitmap {
+        val qrSize = 220
+        val titleHeight = 44
+        val subtitleHeight = 42
+        val height = titleHeight + PADDING + qrSize + PADDING + subtitleHeight + PADDING
+
+        val bitmap = Bitmap.createBitmap(WIDTH_PX, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(Color.WHITE)
+
+        val titlePaint = Paint().apply {
+            color = Color.BLACK
+            isAntiAlias = false
+            textAlign = Paint.Align.CENTER
+            textSize = 32f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val subtitlePaint = Paint().apply {
+            color = Color.BLACK
+            isAntiAlias = false
+            textAlign = Paint.Align.CENTER
+            textSize = 26f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+
+        val centerX = WIDTH_PX / 2
+        canvas.drawText("LAISSEZ UN AVIS !", centerX.toFloat(), (titleHeight - 10).toFloat(), titlePaint)
+
+        val qr = generateQrBitmap(url, qrSize)
+        val qrLeft = centerX - qrSize / 2
+        val qrTop = titleHeight + PADDING
+        canvas.drawBitmap(qr, qrLeft.toFloat(), qrTop.toFloat(), null)
+
+        canvas.drawText(
+            "Scannez pour nous noter sur Google",
+            centerX.toFloat(),
+            (qrTop + qrSize + PADDING + subtitleHeight - 10).toFloat(),
+            subtitlePaint
+        )
+
+        return bitmap
+    }
 
     fun composeDoubleQrSection(
         microstoreQr: String,
@@ -54,8 +104,8 @@ object TicketImage {
             color = Color.BLACK
             isAntiAlias = false
             textAlign = Paint.Align.CENTER
-            textSize = 18f
-            typeface = Typeface.DEFAULT
+            textSize = 26f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
 
         val leftCenterX = WIDTH_PX / 4

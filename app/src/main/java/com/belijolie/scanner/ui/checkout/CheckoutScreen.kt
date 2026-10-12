@@ -20,9 +20,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -53,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.belijolie.scanner.cart.Channel
+import com.belijolie.scanner.export.ExportFormat
 import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
 
@@ -65,12 +68,20 @@ fun CheckoutScreen(
     val unknownBarcode by vm.unknownBarcode.collectAsStateWithLifecycle()
     val printResult by vm.printResult.collectAsStateWithLifecycle()
     val isPrinting by vm.isPrinting.collectAsStateWithLifecycle()
+    val exportResult by vm.exportResult.collectAsStateWithLifecycle()
+    val isExporting by vm.isExporting.collectAsStateWithLifecycle()
 
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(printResult) {
         printResult?.let {
             snackbar.showSnackbar(it.message)
             vm.clearPrintResult()
+        }
+    }
+    LaunchedEffect(exportResult) {
+        exportResult?.let {
+            snackbar.showSnackbar(it.message)
+            vm.clearExportResult()
         }
     }
 
@@ -81,6 +92,8 @@ fun CheckoutScreen(
     var channelToClose by remember { mutableStateOf<Channel?>(null) }
     var showAddManual by remember { mutableStateOf(false) }
     var showPrintConfirm by remember { mutableStateOf(false) }
+    var showCashPayment by remember { mutableStateOf(false) }
+    var showExportFormat by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -172,7 +185,7 @@ fun CheckoutScreen(
                                 fontSize = 14.sp
                             )
                             Text(
-                                line.quantity.toString(),
+                                "x${line.quantity}",
                                 modifier = Modifier.weight(0.6f),
                                 fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.SemiBold,
                                 fontSize = 14.sp
@@ -207,7 +220,12 @@ fun CheckoutScreen(
             totalTtcCents = totalTtcC,
             canPrint = activeChannel != null && activeChannel.lines.isNotEmpty() && !isPrinting,
             isPrinting = isPrinting,
-            onPrint = { showPrintConfirm = true }
+            onPrint = { showPrintConfirm = true },
+            canCash = activeChannel != null && activeChannel.lines.isNotEmpty(),
+            onCashPayment = { showCashPayment = true },
+            canExport = activeChannel != null && activeChannel.lines.isNotEmpty() && !isExporting,
+            isExporting = isExporting,
+            onExport = { showExportFormat = true }
         )
 
         SnackbarHost(hostState = snackbar) { data -> Snackbar(snackbarData = data) }
@@ -278,6 +296,39 @@ fun CheckoutScreen(
             },
             dismissButton = {
                 TextButton(onClick = { channelToClose = null }) { Text("Annuler") }
+            }
+        )
+    }
+
+    if (showCashPayment) {
+        CashPaymentSheet(
+            totalHtCents = activeChannel?.totalCents ?: 0,
+            onDismiss = { showCashPayment = false }
+        )
+    }
+
+    if (showExportFormat) {
+        AlertDialog(
+            onDismissRequest = { showExportFormat = false },
+            title = { Text("Format d'export") },
+            text = { Text("Choisis le format du fichier à envoyer sur ton PC.") },
+            confirmButton = {},
+            dismissButton = {
+                Column {
+                    TextButton(onClick = {
+                        showExportFormat = false
+                        activeChannel?.let { vm.exportChannel(it.id, ExportFormat.CSV) }
+                    }) { Text("Excel (CSV)") }
+                    TextButton(onClick = {
+                        showExportFormat = false
+                        activeChannel?.let { vm.exportChannel(it.id, ExportFormat.JSON) }
+                    }) { Text("JSON") }
+                    TextButton(onClick = {
+                        showExportFormat = false
+                        activeChannel?.let { vm.exportChannel(it.id, ExportFormat.SAGE) }
+                    }) { Text("Sage 50") }
+                    TextButton(onClick = { showExportFormat = false }) { Text("Annuler") }
+                }
             }
         )
     }
@@ -432,36 +483,83 @@ private fun TotalBar(
     totalTtcCents: Int,
     canPrint: Boolean,
     isPrinting: Boolean,
-    onPrint: () -> Unit
+    onPrint: () -> Unit,
+    canCash: Boolean,
+    onCashPayment: () -> Unit,
+    canExport: Boolean,
+    isExporting: Boolean,
+    onExport: () -> Unit
 ) {
     Surface(
         tonalElevation = 4.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-            TotalRow("Quantité totale", totalQty.toString(), bold = false, big = false)
+            TotalRow("Quantité totale", "x$totalQty", bold = false, big = false)
             TotalRow("Total HT", formatEuro(totalHtCents), bold = false, big = false)
             TotalRow("TVA (20%)", formatEuro(totalTvaCents), bold = false, big = false)
             TotalRow("Total TTC", formatEuro(totalTtcCents), bold = true, big = true)
-            Spacer(Modifier.height(8.dp))
-            Button(
-                onClick = onPrint,
-                enabled = canPrint,
-                modifier = Modifier.fillMaxWidth().height(46.dp),
-                shape = RoundedCornerShape(8.dp)
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                if (isPrinting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
+                Button(
+                    onClick = onCashPayment,
+                    enabled = canCash,
+                    modifier = Modifier.weight(1f).height(36.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(0.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+                ) {
+                    Icon(
+                        Icons.Default.AttachMoney,
+                        contentDescription = "Encaissement",
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Impression…", fontSize = 15.sp)
-                } else {
-                    Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Imprimer le ticket", fontSize = 15.sp)
+                }
+                Button(
+                    onClick = onExport,
+                    enabled = canExport,
+                    modifier = Modifier.weight(1f).height(36.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(0.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                ) {
+                    if (isExporting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.Upload,
+                            contentDescription = "Exporter",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Button(
+                    onClick = onPrint,
+                    enabled = canPrint,
+                    modifier = Modifier.weight(1f).height(36.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    if (isPrinting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.Print,
+                            contentDescription = "Imprimer le ticket",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }

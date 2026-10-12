@@ -49,10 +49,15 @@ fun SettingsScreen(
     var microstoreQr by remember(saved.microstoreQr) { mutableStateOf(saved.microstoreQr) }
     var microstoreCode by remember(saved.microstoreCode) { mutableStateOf(saved.microstoreCode) }
     var websiteUrl by remember(saved.websiteUrl) { mutableStateOf(saved.websiteUrl) }
+    var googleReviewUrl by remember(saved.googleReviewUrl) { mutableStateOf(saved.googleReviewUrl) }
     var ip by remember(saved.printerIp) { mutableStateOf(saved.printerIp) }
     var portText by remember(saved.printerPort) { mutableStateOf(saved.printerPort.toString()) }
     var action by remember(saved.scannerAction) { mutableStateOf(saved.scannerAction) }
     var extra by remember(saved.scannerExtra) { mutableStateOf(saved.scannerExtra) }
+    var exportUrl by remember(saved.exportUrl) { mutableStateOf(saved.exportUrl) }
+    var sageManualArt by remember(saved.sageManualArticleCode) { mutableStateOf(saved.sageManualArticleCode) }
+
+    var showPreview by remember { mutableStateOf(false) }
 
     LaunchedEffect(toast) {
         toast?.let {
@@ -141,6 +146,21 @@ fun SettingsScreen(
         )
 
         Spacer(Modifier.height(24.dp))
+        Text("Avis Google", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "L'URL de la page d'avis Google de la boutique. Un QR imprimé en bas de ticket ouvrira directement la page au scan. Astuce : récupère le lien court via Google My Business (format g.page/r/…/review).",
+            fontSize = 12.sp
+        )
+        Spacer(Modifier.height(8.dp))
+        AppTextField(
+            value = googleReviewUrl,
+            onValueChange = { googleReviewUrl = it },
+            label = "URL d'avis Google",
+            mode = KeyboardMode.TEXT
+        )
+
+        Spacer(Modifier.height(24.dp))
         Text("Imprimante Wi-Fi", fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         AppTextField(
@@ -180,6 +200,34 @@ fun SettingsScreen(
         )
 
         Spacer(Modifier.height(24.dp))
+        Text("Export vers PC (Wi-Fi)", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Chaque canal a un bouton d'export qui envoie un CSV (ouvert par Excel) à cette adresse. Lance le petit serveur Python décrit dans ChannelExporter.kt sur ton PC avant d'exporter.",
+            fontSize = 12.sp
+        )
+        Spacer(Modifier.height(8.dp))
+        AppTextField(
+            value = exportUrl,
+            onValueChange = { exportUrl = it },
+            label = "URL export PC (ex. http://192.168.1.5:8080/export)",
+            mode = KeyboardMode.TEXT
+        )
+        Spacer(Modifier.height(8.dp))
+        AppTextField(
+            value = sageManualArt,
+            onValueChange = { sageManualArt = it },
+            label = "Code article Sage pour produits manuels (ex. ART_MANUEL)",
+            mode = KeyboardMode.TEXT
+        )
+
+        Spacer(Modifier.height(24.dp))
+        OutlinedButton(
+            onClick = { showPreview = true },
+            modifier = Modifier.fillMaxWidth().height(48.dp)
+        ) { Text("Aperçu du ticket") }
+
+        Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(
                 onClick = {
@@ -194,10 +242,13 @@ fun SettingsScreen(
                             microstoreQr = microstoreQr.trim(),
                             microstoreCode = microstoreCode.trim(),
                             websiteUrl = websiteUrl.trim(),
+                            googleReviewUrl = googleReviewUrl.trim(),
                             printerIp = ip.trim().ifBlank { AppSettings.DEFAULT.printerIp },
                             printerPort = portText.toIntOrNull() ?: AppSettings.DEFAULT.printerPort,
                             scannerAction = action.trim().ifBlank { AppSettings.DEFAULT.scannerAction },
-                            scannerExtra = extra.trim().ifBlank { AppSettings.DEFAULT.scannerExtra }
+                            scannerExtra = extra.trim().ifBlank { AppSettings.DEFAULT.scannerExtra },
+                            exportUrl = exportUrl.trim(),
+                            sageManualArticleCode = sageManualArt.trim()
                         )
                     )
                 },
@@ -212,5 +263,29 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(16.dp))
         SnackbarHost(hostState = snackbar) { Snackbar(snackbarData = it) }
+    }
+
+    if (showPreview) {
+        TicketPreviewSheet(
+            settings = AppSettings(
+                shopName = shopName.trim().ifBlank { AppSettings.DEFAULT.shopName },
+                address = address.trim(),
+                addressComplement = addressComplement.trim(),
+                postalCode = postalCode.trim(),
+                city = city.trim(),
+                country = country.trim(),
+                microstoreQr = microstoreQr.trim(),
+                microstoreCode = microstoreCode.trim(),
+                websiteUrl = websiteUrl.trim(),
+                googleReviewUrl = googleReviewUrl.trim(),
+                printerIp = ip.trim(),
+                printerPort = portText.toIntOrNull() ?: AppSettings.DEFAULT.printerPort,
+                scannerAction = action.trim(),
+                scannerExtra = extra.trim(),
+                exportUrl = exportUrl.trim(),
+                sageManualArticleCode = sageManualArt.trim()
+            ),
+            onDismiss = { showPreview = false }
+        )
     }
 }

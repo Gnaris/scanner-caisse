@@ -137,9 +137,6 @@ private fun AddProductDialog(
     var priceText by remember { mutableStateOf("") }
     var categoryId by remember { mutableLongStateOf(categories.firstOrNull()?.id ?: 0L) }
 
-    // When this dialog is open, listen for scans to auto-fill the barcode
-    // AND auto-decode the price from the trailing digits (shop convention:
-    // the first 5 chars are a prefix, the rest are the price in cents).
     LaunchedEffect(Unit) {
         ScanEventBus.events.collect { scanned ->
             barcode = scanned

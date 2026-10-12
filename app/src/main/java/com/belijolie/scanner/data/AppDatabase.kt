@@ -11,7 +11,7 @@ import com.belijolie.scanner.data.entity.Product
 
 @Database(
     entities = [Category::class, Product::class],
-    version = 1,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -28,7 +28,13 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "scanner.db"
-                ).build().also { instance = it }
+                )
+                    // v1 → v2 : ajout d'un index UNIQUE sur categories.name.
+                    // L'app est jeune et le catalogue est reconstructible à la
+                    // main → migration destructive OK pour éviter de gérer les
+                    // doublons historiques côté code.
+                    .fallbackToDestructiveMigration()
+                    .build().also { instance = it }
             }
     }
 }

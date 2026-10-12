@@ -20,6 +20,9 @@ interface CategoryDao {
     @Query("SELECT * FROM categories WHERE id = :id")
     suspend fun getById(id: Long): Category?
 
+    @Query("SELECT * FROM categories WHERE name = :name COLLATE NOCASE LIMIT 1")
+    suspend fun findByName(name: String): Category?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(category: Category): Long
 
