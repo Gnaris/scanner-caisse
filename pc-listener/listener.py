@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -253,13 +254,19 @@ class Updater:
             logging.warning("Updater : réponse invalide (%s)", e)
             self.status = "error"; self._emit(); return
 
-        tag = str(data.get("tag_name", "")).lstrip("v").strip()
+        # Le tag peut être "1.0.1", "v1.0.1" ou "pc-listener-v1.0.1" : on
+        # extrait le numéro de version avec une regex pour être robuste.
+        raw_tag = str(data.get("tag_name", ""))
+        m = re.search(r"(\d+(?:\.\d+)+)", raw_tag)
+        tag = m.group(1) if m else ""
         if not tag:
+            logging.warning("Updater : tag_name '%s' sans numéro de version.", raw_tag)
             self.status = "uptodate"; self._emit(); return
         if _version_cmp(tag, APP_VERSION) <= 0:
             self.status = "uptodate"
-            logging.info("Updater : à jour (v%s).", APP_VERSION)
+            logging.info("Updater : à jour (v%s, latest=%s).", APP_VERSION, tag)
             self._emit(); return
+        logging.info("Updater : v%s dispo (local v%s), téléchargement…", tag, APP_VERSION)
 
         exe_asset = next(
             (a for a in data.get("assets", []) if str(a.get("name", "")).lower().endswith(".exe")),
