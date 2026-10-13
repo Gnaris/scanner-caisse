@@ -57,6 +57,10 @@ jobs:
           Write-Host "---- Version header ----"
           Select-String -Path listener.py -Pattern 'APP_VERSION|GITHUB_REPO' | Select-Object -First 2
 
+      - name: Generate ICO icon
+        shell: pwsh
+        run: python build_icon.py
+
       - name: Build exe with PyInstaller
         shell: pwsh
         run: |
@@ -65,6 +69,7 @@ jobs:
             --onefile `
             --windowed `
             --name "ScannerListener" `
+            --icon "build\icon.ico" `
             --hidden-import "PIL._tkinter_finder" `
             listener.py
 

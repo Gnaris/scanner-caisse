@@ -36,11 +36,16 @@ python -m pip install --upgrade pip | Out-Null
 python -m pip install -r requirements.txt pyinstaller | Out-Null
 
 Write-Host "== 2/3  PyInstaller =="
+# Génère l'icône (S bleu) si elle n'existe pas déjà.
+if (-not (Test-Path "build\icon.ico")) {
+    python build_icon.py
+}
 pyinstaller `
     --noconfirm `
     --onefile `
     --windowed `
     --name "ScannerListener" `
+    --icon "build\icon.ico" `
     --hidden-import "PIL._tkinter_finder" `
     listener.py
 
