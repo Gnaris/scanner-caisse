@@ -50,6 +50,12 @@ GITHUB_REPO = "Gnaris/scanner-caisse"
 
 APP_NAME = "ScannerListener"
 APP_DISPLAY = "Scanner Listener"
+
+# Port loopback dédié à la détection de 2e instance. Si une 2e instance est
+# lancée (double-clic sur l'exe/raccourci alors que l'app tourne déjà), elle
+# ne peut pas bind ce port → sait qu'une instance existe → envoie "SHOW"
+# qui fait apparaître la fenêtre Paramètres de l'instance en cours → puis quit.
+SINGLE_INSTANCE_PORT = 54327
 REGISTRY_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 DEFAULT_PORT = 8080
 DEFAULT_OUT_SUBDIR = "scanner-exports"
@@ -71,6 +77,9 @@ def _default_cfg() -> dict:
         "output_dir": default_output_dir(),
         "company": "",
         "autostart": False,
+        # Mémorise la version précédente pour détecter un auto-update et
+        # ouvrir la fenêtre Paramètres au premier démarrage post-update.
+        "last_known_version": "",
     }
 
 
@@ -224,6 +233,12 @@ class Updater:
         for cb in self._on_change:
             try: cb()
             except Exception as e: logging.warning("updater callback: %s", e)
+        # Auto-apply : dès que l'update est prête, on l'installe seule au
+        # bout de 3s. Zéro clic utilisateur requis.
+        if self.status == "ready" and not getattr(self, "_auto_apply_scheduled", False):
+            self._auto_apply_scheduled = True
+            threading.Timer(3.0, self.apply_and_restart).start()
+            logging.info("Updater : auto-install dans 3s…")
 
     def is_enabled(self) -> bool:
         """Updater désactivé en dev (APP_VERSION se termine par -dev) ou si
@@ -304,6 +319,14 @@ class Updater:
         except Exception as e:
             logging.error("Updater : download/extract échoué (%s)", e)
             self.status = "error"; self._emit()
+
+    def schedule_auto_apply(self, delay_s: float = 3.0) -> None:
+        """Lance apply_and_restart dans X secondes dès que status==ready.
+        Pensé pour l'auto-update complet sans intervention utilisateur :
+        l'app détecte, télécharge, s'installe toute seule au bout de X secondes."""
+        if self.status != "ready":
+            return
+        threading.Timer(delay_s, self.apply_and_restart).start()
 
     def apply_and_restart(self) -> None:
         """Avec --onedir, l'install est un DOSSIER. Le script bat :
@@ -393,6 +416,50 @@ def _version_cmp(a: str, b: str) -> int:
     for x, y in zip(pa, pb):
         if x != y: return 1 if x > y else -1
     return (len(pa) > len(pb)) - (len(pa) < len(pb))
+
+
+# ========== Single-instance detection ==========
+
+def try_single_instance_lock() -> Optional[socket.socket]:
+    """Essaie de bind le port loopback de single-instance.
+    Retourne la socket serveur si on est unique, sinon None (2e instance :
+    on a envoyé SHOW à la 1re, on peut quitter)."""
+    try:
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
+        srv.bind(("127.0.0.1", SINGLE_INSTANCE_PORT))
+        srv.listen(5)
+        return srv
+    except OSError:
+        # Port pris → une instance tourne déjà. On lui demande d'afficher
+        # la fenêtre Paramètres puis on quitte.
+        try:
+            with socket.create_connection(("127.0.0.1", SINGLE_INSTANCE_PORT), timeout=1) as c:
+                c.sendall(b"SHOW\n")
+            logging.info("Déjà lancé — SHOW envoyé à l'instance en cours, on quitte.")
+        except OSError as e:
+            logging.warning("2e instance détectée mais contact impossible : %s", e)
+        return None
+
+
+def listen_for_show_requests(srv: socket.socket, on_show) -> None:
+    """Thread daemon : accepte les connections sur le port single-instance et
+    déclenche on_show quand il reçoit 'SHOW'."""
+    def _loop():
+        while True:
+            try:
+                conn, _ = srv.accept()
+                try:
+                    data = conn.recv(16)
+                    if data.strip() == b"SHOW":
+                        on_show()
+                finally:
+                    try: conn.close()
+                    except OSError: pass
+            except OSError as e:
+                logging.warning("single-instance accept: %s", e)
+                break
+    threading.Thread(target=_loop, name="SingleInstance", daemon=True).start()
 
 
 # ========== UI paramètres (Tkinter) ==========
@@ -604,10 +671,26 @@ def open_output_dir_factory(cfg_holder: dict):
 
 def main() -> None:
     setup_logging()
+
+    # Avant toute init : check single-instance. Si une 2e instance est
+    # lancée (double-clic sur l'exe/raccourci bureau/menu démarrer), on
+    # affiche la fenêtre Paramètres de l'instance existante et on quitte.
+    single_instance_socket = try_single_instance_lock()
+    if single_instance_socket is None:
+        return
+
     cfg = load_config()
     cfg["autostart"] = cfg.get("autostart", False) and get_autostart()
     if cfg["autostart"] and not get_autostart():
         set_autostart(True)
+
+    # Détection auto-update : si la version a changé depuis la dernière
+    # exécution, on ouvre la fenêtre Paramètres au lancement pour que
+    # l'utilisateur voie clairement la nouvelle version.
+    previous_version = cfg.get("last_known_version", "")
+    just_updated = previous_version and previous_version != APP_VERSION
+    cfg["last_known_version"] = APP_VERSION
+    save_config(cfg)
 
     server = ListenerServer()
     updater = Updater()
@@ -623,8 +706,22 @@ def main() -> None:
 
     server.start(cfg)
 
+    # Démarre le listener single-instance : quand un `SHOW` arrive sur le
+    # port 54327 (= 2e instance lancée), on affiche la fenêtre.
+    listen_for_show_requests(
+        single_instance_socket,
+        on_show=lambda: settings.root.after(0, settings.show),
+    )
+
     icon = build_tray(server, settings, updater, open_output_dir)
     threading.Thread(target=icon.run, name="pystray", daemon=True).start()
+
+    # Si on vient de se mettre à jour, afficher la fenêtre Paramètres pour
+    # que l'utilisateur voie la nouvelle version apparaître à l'écran.
+    if just_updated:
+        logging.info("Détection auto-update %s → %s, ouverture Paramètres.",
+                     previous_version, APP_VERSION)
+        settings.root.after(500, settings.show)
 
     # Vérification silencieuse 4 secondes après démarrage.
     threading.Timer(4.0, updater.check_in_background).start()
@@ -633,6 +730,8 @@ def main() -> None:
         settings.run_mainloop()
     finally:
         server.stop(); icon.stop()
+        try: single_instance_socket.close()
+        except OSError: pass
 
 
 if __name__ == "__main__":
