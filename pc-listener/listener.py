@@ -421,7 +421,7 @@ class SettingsWindow:
         ttk.Label(self.root, text=f"{APP_DISPLAY}  v{APP_VERSION}", font=("", 10, "bold")).grid(
             row=row, column=0, columnspan=2, sticky="w", **pad)
         row += 1
-        ttk.Label(self.root, text="✓ Mise à jour automatique activée",
+        ttk.Label(self.root, text="✓ Auto-update fonctionne (silencieux depuis GitHub)",
                   foreground="#15803D").grid(
             row=row, column=0, columnspan=2, sticky="w", padx=10)
         row += 1
