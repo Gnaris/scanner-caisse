@@ -290,18 +290,37 @@ class Updater:
             self.status = "error"; self._emit()
 
     def apply_and_restart(self) -> None:
-        """Lance un script batch qui attend 2s, remplace l'exe, puis relance."""
+        """Lance un script batch qui :
+         1. attend que l'app actuelle soit vraiment fermée (3 s + taskkill)
+         2. nettoie les vieux dossiers `_MEIxxxxxx` que PyInstaller laisse
+            dans %TEMP% (cause d'erreurs 'Failed to load Python DLL' si un
+            nouveau _MEI écrase mal l'ancien)
+         3. remplace l'exe
+         4. relance (avec un délai pour laisser l'antivirus scanner)
+        """
         if self.status != "ready" or self.download_path is None:
             return
         if not getattr(sys, "frozen", False):
-            return  # devrait pas arriver (is_enabled filtre)
+            return
         current = Path(sys.executable)
         update = self.download_path
+        exe_name = current.name
         cmd_file = Path(tempfile.gettempdir()) / "ScannerListener-apply-update.cmd"
         script = (
             "@echo off\r\n"
+            "timeout /t 3 /nobreak >nul\r\n"
+            # Force la fermeture si une instance tourne encore.
+            f'taskkill /im "{exe_name}" /f >nul 2>&1\r\n'
+            "timeout /t 1 /nobreak >nul\r\n"
+            # Nettoie les vieux dossiers _MEI de PyInstaller (sinon la nouvelle
+            # extraction peut tomber sur un dossier partiellement rempli →
+            # erreur "Failed to load Python DLL").
+            'for /d %%d in ("%TEMP%\\_MEI*") do rmdir /s /q "%%d" >nul 2>&1\r\n'
+            # Remplace l'exe.
+            f'move /y "{update}" "{current}" >nul\r\n'
+            # Petit délai pour laisser l'antivirus Windows Defender scanner le
+            # nouveau fichier avant qu'on tente de le lancer.
             "timeout /t 2 /nobreak >nul\r\n"
-            f'move /y "{update}" "{current}"\r\n'
             f'start "" "{current}"\r\n'
             'del "%~f0"\r\n'
         )
@@ -312,7 +331,6 @@ class Updater:
             creationflags=CREATE_NO_WINDOW,
             close_fds=True,
         )
-        # Quit l'app : le batch prendra le relais pendant les 2 secondes.
         os._exit(0)
 
 
