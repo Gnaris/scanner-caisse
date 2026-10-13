@@ -61,12 +61,15 @@ jobs:
         shell: pwsh
         run: python build_icon.py
 
-      - name: Build exe with PyInstaller
+      - name: Build with PyInstaller (onedir)
         shell: pwsh
+        # --onedir au lieu de --onefile : évite les crashes "Failed to load
+        # Python DLL" causés par Windows Defender qui interrompt l'extraction
+        # temp _MEIxxxx. L'app devient un dossier `dist\ScannerListener\`.
         run: |
           pyinstaller `
             --noconfirm `
-            --onefile `
+            --onedir `
             --windowed `
             --name "ScannerListener" `
             --icon "build\icon.ico" `
@@ -84,12 +87,14 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$v" installer.iss
           Get-ChildItem dist\Installer\
 
-      - name: Rename exe with version
+      - name: Zip the onedir folder for the auto-updater
         shell: pwsh
         run: |
           $v = "${{ steps.version.outputs.version }}"
-          Move-Item dist\ScannerListener.exe "dist\ScannerListener-$v.exe"
-          Get-ChildItem dist\
+          Compress-Archive -Path "dist\ScannerListener\*" `
+            -DestinationPath "dist\ScannerListener-$v.zip" `
+            -CompressionLevel Optimal
+          Get-ChildItem dist\ -Filter *.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -98,10 +103,9 @@ jobs:
           name: Scanner Listener v${{ steps.version.outputs.version }}
           generate_release_notes: true
           files: |
-            pc-listener/dist/ScannerListener-${{ steps.version.outputs.version }}.exe
+            pc-listener/dist/ScannerListener-${{ steps.version.outputs.version }}.zip
             pc-listener/dist/Installer/ScannerListener-Setup-${{ steps.version.outputs.version }}.exe
-          # Deux .exe sont publiés :
-          #  - ScannerListener-X.Y.Z.exe       → utilisé par l'updater silencieux
-          #  - ScannerListener-Setup-X.Y.Z.exe → installeur Inno Setup (1re install
-          #    pour que l'app apparaisse dans "Programmes et fonctionnalités"
-          #    et puisse être désinstallée proprement par l'utilisateur)
+          # Deux assets :
+          #  - ScannerListener-X.Y.Z.zip       → utilisé par l'updater silencieux
+          #    (contient le exe + _internal/, extrait dans install dir)
+          #  - ScannerListener-Setup-X.Y.Z.exe → installeur Inno Setup (1re install)

@@ -35,21 +35,26 @@ if (-not (Test-Path ".venv")) {
 python -m pip install --upgrade pip | Out-Null
 python -m pip install -r requirements.txt pyinstaller | Out-Null
 
-Write-Host "== 2/3  PyInstaller =="
+Write-Host "== 2/3  PyInstaller (onedir) =="
 # Génère l'icône (S bleu) si elle n'existe pas déjà.
 if (-not (Test-Path "build\icon.ico")) {
     python build_icon.py
 }
+# --onedir au lieu de --onefile : évite l'extraction temp PyInstaller qui
+# plantait avec Windows Defender ("Failed to load Python DLL" sur _MEIxxxx).
+# L'app est un dossier `dist\ScannerListener\` avec un petit launcher .exe
+# et les libs à côté. Launch instantané, zéro extraction, zéro conflit AV.
 pyinstaller `
     --noconfirm `
-    --onefile `
+    --onedir `
     --windowed `
     --name "ScannerListener" `
     --icon "build\icon.ico" `
     --hidden-import "PIL._tkinter_finder" `
     listener.py
 
-$exe = Join-Path $here "dist\ScannerListener.exe"
+$appDir = Join-Path $here "dist\ScannerListener"
+$exe    = Join-Path $appDir "ScannerListener.exe"
 if (-not (Test-Path $exe)) {
     throw "L'executable n'a pas ete produit."
 }

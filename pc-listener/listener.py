@@ -268,89 +268,96 @@ class Updater:
             self._emit(); return
         logging.info("Updater : v%s dispo (local v%s), téléchargement…", tag, APP_VERSION)
 
-        # Chaque release contient 2 .exe :
-        #   - ScannerListener-X.Y.Z.exe        → exe nu (préféré pour update
-        #                                        silencieux, remplacement in-place)
-        #   - ScannerListener-Setup-X.Y.Z.exe  → installeur Inno Setup (pour
-        #                                        la 1re install, PAS pour l'update)
-        # On veut l'exe nu : il n'affiche pas de prompt UAC et se remplace vite.
+        # Chaque release contient 2 assets :
+        #   - ScannerListener-X.Y.Z.zip        → onedir zippé (pour l'updater)
+        #   - ScannerListener-Setup-X.Y.Z.exe  → installeur Inno Setup (1re install)
+        # On veut le ZIP : extraction instantanée, pas d'anti-virus qui corrompt.
         assets = data.get("assets", [])
-        exe_asset = next(
-            (a for a in assets
-             if str(a.get("name", "")).lower().endswith(".exe")
-             and "setup" not in str(a.get("name", "")).lower()),
+        zip_asset = next(
+            (a for a in assets if str(a.get("name", "")).lower().endswith(".zip")),
             None,
         )
-        if not exe_asset:
-            # Fallback : premier .exe trouvé (ex. ancienne release sans installeur)
-            exe_asset = next(
-                (a for a in assets if str(a.get("name", "")).lower().endswith(".exe")),
-                None,
-            )
-        if not exe_asset:
-            logging.warning("Updater : aucun .exe trouvé dans la release.")
+        if not zip_asset:
+            logging.warning("Updater : aucun .zip trouvé dans la release.")
             self.status = "error"; self._emit(); return
 
-        download_url = exe_asset["browser_download_url"]
+        download_url = zip_asset["browser_download_url"]
         self.status = "downloading"; self.latest_version = tag; self._emit()
         try:
-            tmp = Path(tempfile.gettempdir()) / f"ScannerListener-update-{tag}.exe"
+            tmp = Path(tempfile.gettempdir()) / f"ScannerListener-update-{tag}.zip"
             urllib.request.urlretrieve(download_url, tmp)
-            # Supprime le flag "téléchargé d'Internet" (Zone.Identifier) qui
-            # fait que Windows Defender scan l'exe pendant son extraction
-            # PyInstaller → extraction corrompue → "Failed to load python311.dll".
             _strip_mark_of_the_web(tmp)
-            self.download_path = tmp
+            # Extrait le ZIP dans un dossier temp pour que le script bat ait
+            # juste à faire un xcopy /e vers le dossier d'install.
+            extract_dir = Path(tempfile.gettempdir()) / f"ScannerListener-update-{tag}"
+            if extract_dir.exists():
+                import shutil
+                shutil.rmtree(extract_dir, ignore_errors=True)
+            import zipfile
+            with zipfile.ZipFile(tmp) as zf:
+                zf.extractall(extract_dir)
+            tmp.unlink(missing_ok=True)
+            self.download_path = extract_dir
             self.status = "ready"
-            logging.info("Updater : v%s téléchargée dans %s.", tag, tmp)
+            logging.info("Updater : v%s extraite dans %s.", tag, extract_dir)
             self._emit()
         except Exception as e:
-            logging.error("Updater : download échoué (%s)", e)
+            logging.error("Updater : download/extract échoué (%s)", e)
             self.status = "error"; self._emit()
 
     def apply_and_restart(self) -> None:
-        """Lance un script batch qui :
-         1. attend que l'app actuelle soit vraiment fermée (3 s + taskkill)
-         2. nettoie les vieux dossiers `_MEIxxxxxx` que PyInstaller laisse
-            dans %TEMP% (cause d'erreurs 'Failed to load Python DLL' si un
-            nouveau _MEI écrase mal l'ancien)
-         3. remplace l'exe
-         4. relance (avec un délai pour laisser l'antivirus scanner)
+        """Avec --onedir, l'install est un DOSSIER. Le script bat :
+         1. attend que l'app soit fermée (poll jusqu'à max 15 s)
+         2. retire les MOTW sur le dossier source (fichiers venus d'Internet)
+         3. xcopy le contenu du dossier d'update par-dessus l'install
+         4. relance le launcher .exe
+         5. logge tout dans %TEMP%\\ScannerListener-apply-update.log pour debug
         """
         if self.status != "ready" or self.download_path is None:
             return
         if not getattr(sys, "frozen", False):
             return
-        current = Path(sys.executable)
-        update = self.download_path
-        exe_name = current.name
+        current_exe = Path(sys.executable)
+        install_dir = current_exe.parent
+        update_dir = self.download_path
+        exe_name = current_exe.name
         cmd_file = Path(tempfile.gettempdir()) / "ScannerListener-apply-update.cmd"
+        log_file = Path(tempfile.gettempdir()) / "ScannerListener-apply-update.log"
         script = (
             "@echo off\r\n"
+            f'set "LOG={log_file}"\r\n'
+            'echo [%date% %time%] START >> "%LOG%"\r\n'
+            f'echo From: {update_dir} >> "%LOG%"\r\n'
+            f'echo To:   {install_dir} >> "%LOG%"\r\n'
             "timeout /t 2 /nobreak >nul\r\n"
-            # Kill brutal + killtree (/t pour les enfants éventuels)
-            f'taskkill /im "{exe_name}" /f /t >nul 2>&1\r\n'
-            # Boucle d'attente : vérifier que ScannerListener est VRAIMENT mort
-            # (max 10 s). Sinon le move échoue avec "fichier verrouillé".
+            f'taskkill /im "{exe_name}" /f /t >> "%LOG%" 2>&1\r\n'
+            'echo [%date% %time%] waitkill start >> "%LOG%"\r\n'
             "set /a __waits=0\r\n"
             ":waitkill\r\n"
             f'tasklist /fi "imagename eq {exe_name}" 2>nul | find /i "{exe_name}" >nul\r\n'
             "if errorlevel 1 goto killed\r\n"
             "set /a __waits+=1\r\n"
-            "if %__waits% geq 10 goto killed\r\n"
+            "if %__waits% geq 15 goto killed\r\n"
             "timeout /t 1 /nobreak >nul\r\n"
             "goto waitkill\r\n"
             ":killed\r\n"
-            # Retire le MOTW (ceinture et bretelles — déjà fait côté Python)
-            f'powershell -NoProfile -Command "Unblock-File -Path \'{update}\' -ErrorAction SilentlyContinue"\r\n'
-            # Nettoie TOUS les _MEI (vieux + ceux encore là après kill)
-            'for /d %%d in ("%TEMP%\\_MEI*") do rmdir /s /q "%%d" >nul 2>&1\r\n'
-            # Remplace l'exe
-            f'move /y "{update}" "{current}" >nul\r\n'
-            # Laisse Defender scanner le nouvel exe tranquillement
-            "timeout /t 3 /nobreak >nul\r\n"
-            # Relance
-            f'start "" "{current}"\r\n'
+            'echo [%date% %time%] killed after %__waits% waits >> "%LOG%"\r\n'
+            # Retire tous les MOTW du dossier source (défensif, déjà fait sur le ZIP)
+            f'powershell -NoProfile -Command "Get-ChildItem -Recurse -LiteralPath \'{update_dir}\' | Unblock-File -ErrorAction SilentlyContinue" >> "%LOG%" 2>&1\r\n'
+            'echo [%date% %time%] xcopy >> "%LOG%"\r\n'
+            # /E = sous-dossiers (vides inclus) /I = assumer dest est dir
+            # /H = fichiers cachés /Y = overwrite silencieux
+            f'xcopy "{update_dir}\\*" "{install_dir}\\" /E /I /H /Y >> "%LOG%" 2>&1\r\n'
+            "if errorlevel 1 (\r\n"
+            '    echo XCOPY FAILED errorlevel %errorlevel% >> "%LOG%"\r\n'
+            "    goto end\r\n"
+            ")\r\n"
+            'echo [%date% %time%] cleanup update dir >> "%LOG%"\r\n'
+            f'rmdir /s /q "{update_dir}" >nul 2>&1\r\n'
+            'echo [%date% %time%] launching >> "%LOG%"\r\n'
+            f'start "" "{current_exe}"\r\n'
+            ":end\r\n"
+            'echo [%date% %time%] DONE >> "%LOG%"\r\n'
             'del "%~f0"\r\n'
         )
         cmd_file.write_text(script, encoding="utf-8")

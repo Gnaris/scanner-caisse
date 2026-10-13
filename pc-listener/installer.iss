@@ -47,7 +47,9 @@ Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 Name: "autostart"; Description: "Démarrer automatiquement avec Windows"; GroupDescription: "Options :"
 
 [Files]
-Source: "dist\ScannerListener.exe"; DestDir: "{app}"; DestName: "{#MyAppExe}"; Flags: ignoreversion
+; Avec PyInstaller --onedir, il faut copier TOUT le dossier (exe + _internal/)
+; sinon le launcher ne trouve pas python.dll et consorts.
+Source: "dist\ScannerListener\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"
