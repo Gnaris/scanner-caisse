@@ -390,7 +390,7 @@ class SettingsWindow:
         pad = {"padx": 10, "pady": 6}
         row = 0
 
-        ttk.Label(self.root, text=f"{APP_DISPLAY}  v{APP_VERSION}  a b", font=("", 10, "bold")).grid(
+        ttk.Label(self.root, text=f"{APP_DISPLAY}  v{APP_VERSION}", font=("", 10, "bold")).grid(
             row=row, column=0, columnspan=2, sticky="w", **pad)
         row += 1
 
