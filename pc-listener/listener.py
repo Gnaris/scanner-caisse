@@ -296,6 +296,10 @@ class Updater:
         try:
             tmp = Path(tempfile.gettempdir()) / f"ScannerListener-update-{tag}.exe"
             urllib.request.urlretrieve(download_url, tmp)
+            # Supprime le flag "téléchargé d'Internet" (Zone.Identifier) qui
+            # fait que Windows Defender scan l'exe pendant son extraction
+            # PyInstaller → extraction corrompue → "Failed to load python311.dll".
+            _strip_mark_of_the_web(tmp)
             self.download_path = tmp
             self.status = "ready"
             logging.info("Updater : v%s téléchargée dans %s.", tag, tmp)
@@ -323,19 +327,29 @@ class Updater:
         cmd_file = Path(tempfile.gettempdir()) / "ScannerListener-apply-update.cmd"
         script = (
             "@echo off\r\n"
-            "timeout /t 3 /nobreak >nul\r\n"
-            # Force la fermeture si une instance tourne encore.
-            f'taskkill /im "{exe_name}" /f >nul 2>&1\r\n'
-            "timeout /t 1 /nobreak >nul\r\n"
-            # Nettoie les vieux dossiers _MEI de PyInstaller (sinon la nouvelle
-            # extraction peut tomber sur un dossier partiellement rempli →
-            # erreur "Failed to load Python DLL").
-            'for /d %%d in ("%TEMP%\\_MEI*") do rmdir /s /q "%%d" >nul 2>&1\r\n'
-            # Remplace l'exe.
-            f'move /y "{update}" "{current}" >nul\r\n'
-            # Petit délai pour laisser l'antivirus Windows Defender scanner le
-            # nouveau fichier avant qu'on tente de le lancer.
             "timeout /t 2 /nobreak >nul\r\n"
+            # Kill brutal + killtree (/t pour les enfants éventuels)
+            f'taskkill /im "{exe_name}" /f /t >nul 2>&1\r\n'
+            # Boucle d'attente : vérifier que ScannerListener est VRAIMENT mort
+            # (max 10 s). Sinon le move échoue avec "fichier verrouillé".
+            "set /a __waits=0\r\n"
+            ":waitkill\r\n"
+            f'tasklist /fi "imagename eq {exe_name}" 2>nul | find /i "{exe_name}" >nul\r\n'
+            "if errorlevel 1 goto killed\r\n"
+            "set /a __waits+=1\r\n"
+            "if %__waits% geq 10 goto killed\r\n"
+            "timeout /t 1 /nobreak >nul\r\n"
+            "goto waitkill\r\n"
+            ":killed\r\n"
+            # Retire le MOTW (ceinture et bretelles — déjà fait côté Python)
+            f'powershell -NoProfile -Command "Unblock-File -Path \'{update}\' -ErrorAction SilentlyContinue"\r\n'
+            # Nettoie TOUS les _MEI (vieux + ceux encore là après kill)
+            'for /d %%d in ("%TEMP%\\_MEI*") do rmdir /s /q "%%d" >nul 2>&1\r\n'
+            # Remplace l'exe
+            f'move /y "{update}" "{current}" >nul\r\n'
+            # Laisse Defender scanner le nouvel exe tranquillement
+            "timeout /t 3 /nobreak >nul\r\n"
+            # Relance
             f'start "" "{current}"\r\n'
             'del "%~f0"\r\n'
         )
@@ -347,6 +361,20 @@ class Updater:
             close_fds=True,
         )
         os._exit(0)
+
+
+def _strip_mark_of_the_web(path: Path) -> None:
+    """Supprime l'ADS NTFS 'Zone.Identifier' que Windows attache aux fichiers
+    téléchargés via HTTP. Sans ça, Windows Defender surveille le process au
+    lancement et peut interrompre l'extraction PyInstaller du _MEI, causant
+    'Failed to load Python DLL'."""
+    ads = str(path) + ":Zone.Identifier"
+    try:
+        if os.path.exists(ads):
+            os.remove(ads)
+            logging.info("Updater : MOTW retiré sur %s", path.name)
+    except OSError as e:
+        logging.warning("Updater : impossible de retirer le MOTW (%s)", e)
 
 
 def _version_cmp(a: str, b: str) -> int:
