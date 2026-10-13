@@ -268,10 +268,25 @@ class Updater:
             self._emit(); return
         logging.info("Updater : v%s dispo (local v%s), téléchargement…", tag, APP_VERSION)
 
+        # Chaque release contient 2 .exe :
+        #   - ScannerListener-X.Y.Z.exe        → exe nu (préféré pour update
+        #                                        silencieux, remplacement in-place)
+        #   - ScannerListener-Setup-X.Y.Z.exe  → installeur Inno Setup (pour
+        #                                        la 1re install, PAS pour l'update)
+        # On veut l'exe nu : il n'affiche pas de prompt UAC et se remplace vite.
+        assets = data.get("assets", [])
         exe_asset = next(
-            (a for a in data.get("assets", []) if str(a.get("name", "")).lower().endswith(".exe")),
+            (a for a in assets
+             if str(a.get("name", "")).lower().endswith(".exe")
+             and "setup" not in str(a.get("name", "")).lower()),
             None,
         )
+        if not exe_asset:
+            # Fallback : premier .exe trouvé (ex. ancienne release sans installeur)
+            exe_asset = next(
+                (a for a in assets if str(a.get("name", "")).lower().endswith(".exe")),
+                None,
+            )
         if not exe_asset:
             logging.warning("Updater : aucun .exe trouvé dans la release.")
             self.status = "error"; self._emit(); return
