@@ -1,5 +1,11 @@
 package com.belijolie.scanner.ui.keyboard
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -40,11 +47,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -134,6 +145,12 @@ private fun KeyboardDialog(
     var currentMode by remember { mutableStateOf(mode) }
     val focusRequester = remember { FocusRequester() }
     val localView = LocalView.current
+    val clipboard = LocalClipboardManager.current
+
+    // Capture le dernier layout du BasicTextField pour pouvoir dessiner nous-même
+    // un curseur à la bonne position (readOnly=true cache le curseur natif —
+    // bug/limitation Compose, voir issuetracker 197402915).
+    var textLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
 
     // Garde-fou : on force quand même SOFT_INPUT_STATE_ALWAYS_HIDDEN sur la
     // fenêtre du Dialog. Mais la vraie barrière anti-IME, c'est `readOnly=true`
@@ -225,6 +242,27 @@ private fun KeyboardDialog(
                         color = Color(0xFF6B7280),
                         modifier = Modifier.weight(1f)
                     )
+                    // Bouton Coller : lit le presse-papiers et insère à la
+                    // position du curseur. Le menu natif Android n'offre pas
+                    // "Coller" en readOnly=true, donc on expose l'action ici.
+                    IconButton(
+                        onClick = {
+                            val pasted = clipboard.getText()?.text ?: return@IconButton
+                            if (pasted.isEmpty()) return@IconButton
+                            val start = minOf(clampedSel.start, clampedSel.end)
+                            val end = maxOf(clampedSel.start, clampedSel.end)
+                            val newText = value.substring(0, start) + pasted + value.substring(end)
+                            selection = TextRange(start + pasted.length)
+                            onChange(newText)
+                        },
+                        modifier = Modifier.size(36.dp).focusProperties { canFocus = false }
+                    ) {
+                        Icon(
+                            Icons.Default.ContentPaste,
+                            contentDescription = "Coller",
+                            tint = Color(0xFF4F46E5)
+                        )
+                    }
                     IconButton(
                         onClick = onDismiss,
                         modifier = Modifier.size(36.dp)
@@ -250,14 +288,16 @@ private fun KeyboardDialog(
                             selection = newTfv.selection
                             if (newTfv.text != value) onChange(newTfv.text)
                         },
+                        onTextLayout = { textLayout = it },
                         // readOnly = true : garantit que le clavier Android ne
                         // s'ouvre JAMAIS, même quand le KeyboardDialog est
                         // empilé par-dessus un AlertDialog (cas où
-                        // SOFT_INPUT_STATE_ALWAYS_HIDDEN ne suffit pas). Le
-                        // curseur bleu, les poignées de sélection et le menu
-                        // natif Tout sélectionner / Copier restent actifs en
-                        // readOnly. La saisie n'est pas impactée : nos touches
-                        // custom appellent onChange() directement.
+                        // SOFT_INPUT_STATE_ALWAYS_HIDDEN ne suffit pas). Les
+                        // poignées de sélection et le menu natif "Tout
+                        // sélectionner / Copier" restent actifs. Le curseur
+                        // natif est caché en readOnly (bug Compose connu) —
+                        // on en dessine un manuellement par-dessus (voir
+                        // bloc Canvas qui suit).
                         readOnly = true,
                         textStyle = TextStyle(
                             fontSize = 22.sp,
@@ -269,6 +309,43 @@ private fun KeyboardDialog(
                             .fillMaxWidth()
                             .focusRequester(focusRequester)
                     )
+
+                    // Curseur dessiné à la main : trait vertical qui clignote
+                    // à la position actuelle. Masqué quand une sélection est
+                    // active (highlight pris en charge nativement par le
+                    // BasicTextField même en readOnly).
+                    val layout = textLayout
+                    if (layout != null && clampedSel.collapsed) {
+                        val cursorRect = runCatching {
+                            layout.getCursorRect(clampedSel.start.coerceIn(0, value.length))
+                        }.getOrNull()
+                        if (cursorRect != null) {
+                            val infinite = rememberInfiniteTransition(label = "cursorBlink")
+                            val alpha by infinite.animateFloat(
+                                initialValue = 1f,
+                                targetValue = 0f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = keyframes {
+                                        durationMillis = 1000
+                                        1f at 0 using LinearEasing
+                                        1f at 500 using LinearEasing
+                                        0f at 500 using LinearEasing
+                                        0f at 1000 using LinearEasing
+                                    }
+                                ),
+                                label = "cursorAlpha"
+                            )
+                            val strokePx = with(LocalDensity.current) { 2.dp.toPx() }
+                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                drawLine(
+                                    color = Color(0xFF4F46E5).copy(alpha = alpha),
+                                    start = Offset(cursorRect.left, cursorRect.top),
+                                    end = Offset(cursorRect.left, cursorRect.bottom),
+                                    strokeWidth = strokePx
+                                )
+                            }
+                        }
+                    }
                 }
                 LaunchedEffect(Unit) { focusRequester.requestFocus() }
                 Spacer(Modifier.height(10.dp))
