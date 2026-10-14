@@ -94,6 +94,48 @@ data class Channel(
         })
     }
 
+    /**
+     * Édite une ligne du panier (depuis un click sur la ligne). Si la nouvelle
+     * (catégorie, prix) match une autre ligne existante, les deux fusionnent
+     * et la ligne originale disparaît. Sinon on remplace sur place.
+     */
+    fun editLine(
+        productId: Long,
+        newCategoryName: String,
+        newPriceCents: Int,
+        newQuantity: Int,
+        newCategoryNameEn: String? = null,
+        newSageArticleCode: String? = null,
+    ): Channel {
+        val qty = newQuantity.coerceAtLeast(1)
+        val targetLine = lines.firstOrNull { it.productId == productId } ?: return this
+        val existingOther = lines.firstOrNull {
+            it.productId != productId &&
+                it.categoryName == newCategoryName &&
+                it.unitPriceCents == newPriceCents
+        }
+        val newLines = if (existingOther != null) {
+            lines
+                .filter { it.productId != productId }
+                .map {
+                    if (it.productId == existingOther.productId)
+                        it.copy(quantity = it.quantity + qty)
+                    else it
+                }
+        } else {
+            lines.map {
+                if (it.productId == productId) it.copy(
+                    categoryName = newCategoryName,
+                    unitPriceCents = newPriceCents,
+                    quantity = qty,
+                    categoryNameEn = newCategoryNameEn ?: targetLine.categoryNameEn,
+                    sageArticleCode = newSageArticleCode ?: targetLine.sageArticleCode,
+                ) else it
+            }
+        }
+        return copy(lines = newLines)
+    }
+
     fun rename(newName: String): Channel = copy(name = newName)
 }
 

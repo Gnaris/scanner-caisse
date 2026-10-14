@@ -102,6 +102,29 @@ class ChannelsRepository(private val context: Context) {
         save(st.copy(channels = updated))
     }
 
+    suspend fun editLineInActive(
+        productId: Long,
+        newCategoryName: String,
+        newPriceCents: Int,
+        newQuantity: Int,
+        newCategoryNameEn: String? = null,
+        newSageArticleCode: String? = null,
+    ) {
+        val st = current()
+        val activeId = st.activeChannelId ?: return
+        val updated = st.channels.map { ch ->
+            if (ch.id == activeId) ch.editLine(
+                productId = productId,
+                newCategoryName = newCategoryName,
+                newPriceCents = newPriceCents,
+                newQuantity = newQuantity,
+                newCategoryNameEn = newCategoryNameEn,
+                newSageArticleCode = newSageArticleCode,
+            ) else ch
+        }
+        save(st.copy(channels = updated))
+    }
+
     /** Called after a successful print: bumps the ticket counter, keeps the channel open. */
     suspend fun bumpTicketNumber(): Int {
         val st = current()

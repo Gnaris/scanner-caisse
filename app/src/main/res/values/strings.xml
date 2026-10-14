@@ -98,6 +98,7 @@
     <string name="checkout_last_scan_edit">Modifier le dernier scan / 编辑最后扫描</string>
     <string name="checkout_last_scan_hint">Ces changements vont annuler le dernier produit scanné et le rajouter avec les nouvelles valeurs. Pas de retour en arrière sur les scans précédents. / 这些更改将取消最后扫描的商品并以新值重新添加。无法撤回之前的扫描。</string>
     <string name="checkout_quantity">Quantité / 数量</string>
+    <string name="checkout_line_edit">Modifier la ligne / 编辑该行</string>
 
     <!-- Encaissement (caisse espèces) -->
     <string name="cash_title">Encaissement / 收款</string>

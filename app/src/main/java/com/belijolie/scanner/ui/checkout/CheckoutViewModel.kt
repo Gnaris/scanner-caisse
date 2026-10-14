@@ -373,6 +373,27 @@ class CheckoutViewModel(
     }
 
     /**
+     * Édite une ligne arbitraire du panier (click direct sur une ligne).
+     * Les métadonnées EN / Sage sont récupérées depuis la DB si la nouvelle
+     * catégorie y existe ; sinon on garde les snapshots existants.
+     */
+    fun editLine(productId: Long, newCategoryName: String, newPriceCents: Int, newQuantity: Int) {
+        val cleaned = newCategoryName.trim()
+        if (cleaned.isEmpty()) return
+        viewModelScope.launch {
+            val newCat = db.categoryDao().findByName(cleaned)
+            channelsRepo.editLineInActive(
+                productId = productId,
+                newCategoryName = cleaned,
+                newPriceCents = newPriceCents,
+                newQuantity = newQuantity.coerceAtLeast(1),
+                newCategoryNameEn = newCat?.nameEn,
+                newSageArticleCode = newCat?.sageArticleCode,
+            )
+        }
+    }
+
+    /**
      * Manually add a line to the active channel (no DB product, no barcode).
      * Merges with an existing line if (category, price) matches.
      *

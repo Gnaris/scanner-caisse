@@ -48,6 +48,8 @@ import com.belijolie.scanner.ui.settings.SettingsScreen
 import com.belijolie.scanner.ui.theme.ScannerTheme
 import com.belijolie.scanner.update.UpdateDialog
 import com.belijolie.scanner.update.UpdateState
+import com.belijolie.scanner.util.isNetworkConnected
+import androidx.compose.ui.platform.LocalContext
 
 class MainActivity : ComponentActivity() {
 
@@ -84,16 +86,26 @@ private fun AppRoot() {
 
     val updateManager = ScannerApp.instance.updateManager
     val updateState by updateManager.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
-    // Au démarrage on bloque l'UI avec un splash tant que le check de MAJ n'a
-    // pas aboutit. Le splash disparaît dès qu'on sort de Checking → UpToDate /
-    // Available / Error (ou Idle si l'updater est désactivé en debug).
+    // Au démarrage, splash pendant le check de MAJ. Si aucun réseau n'est
+    // disponible → on skip le check et l'app démarre direct : continuité
+    // assurée hors Wi-Fi. Si réseau OK → silent=false pour transition
+    // d'état propre (le dialog MAJ ne s'affiche que si une version plus
+    // récente existe — pas de dialog "déjà à jour"). La MAJ n'est jamais
+    // obligatoire, le dialog Available a toujours un bouton "Plus tard".
     var initialCheckDone by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        updateManager.checkForUpdate(silent = false)
+        if (isNetworkConnected(context)) {
+            updateManager.checkForUpdate(silent = false)
+        } else {
+            initialCheckDone = true
+        }
     }
     LaunchedEffect(updateState) {
-        if (updateState !is UpdateState.Checking) initialCheckDone = true
+        if (updateState !is UpdateState.Idle && updateState !is UpdateState.Checking) {
+            initialCheckDone = true
+        }
     }
 
     if (!initialCheckDone) {

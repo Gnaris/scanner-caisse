@@ -18,13 +18,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Upload
+import androidx.compose.ui.draw.rotate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -114,6 +121,7 @@ fun CheckoutScreen(
     var showCashPayment by remember { mutableStateOf(false) }
     var showExportFormat by remember { mutableStateOf(false) }
     var lineToRemove by remember { mutableStateOf<com.belijolie.scanner.cart.CartLine?>(null) }
+    var lineToEdit by remember { mutableStateOf<com.belijolie.scanner.cart.CartLine?>(null) }
 
     Column(
         modifier = Modifier
@@ -264,7 +272,12 @@ fun CheckoutScreen(
                             shape = RoundedCornerShape(8.dp),
                             color = Color.White,
                             tonalElevation = 1.dp,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                // Click sur une ligne → dialog d'édition.
+                                // Les sous-composants (poubelle) ont leur
+                                // propre clickable qui consomme le tap.
+                                .clickable { lineToEdit = line }
                         ) {
                             Row(
                                 modifier = Modifier
@@ -458,6 +471,18 @@ fun CheckoutScreen(
             }
         )
     }
+
+    lineToEdit?.let { line ->
+        EditCartLineDialog(
+            line = line,
+            categories = categories,
+            onDismiss = { lineToEdit = null },
+            onConfirm = { newCategory, newPrice, newQty ->
+                vm.editLine(line.productId, newCategory, newPrice, newQty)
+                lineToEdit = null
+            }
+        )
+    }
 }
 
 @Composable
@@ -599,15 +624,56 @@ private fun TotalBar(
     isExporting: Boolean,
     onExport: () -> Unit
 ) {
+    // Tiroir : par défaut déplié. Click sur le header (chevron) replie le
+    // détail (lignes HT / TVA / Qté) et les boutons, ne laissant visible
+    // que le total TTC compact. Animation expand/collapse 250ms.
+    var expanded by remember { mutableStateOf(true) }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(durationMillis = 250),
+        label = "chevronRotation",
+    )
+
     Surface(
         tonalElevation = 4.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.checkout_total_ttc),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    formatEuro(totalTtcCents),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(22.dp)
+                        .rotate(chevronRotation),
+                )
+            }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(animationSpec = tween(250)),
+                exit = shrinkVertically(animationSpec = tween(250)),
+            ) { Column {
             TotalRow(stringResource(R.string.checkout_total_quantity), "x$totalQty", bold = false, big = false)
             TotalRow(stringResource(R.string.checkout_total_ht), formatEuro(totalHtCents), bold = false, big = false)
             TotalRow(stringResource(R.string.checkout_total_vat), formatEuro(totalTvaCents), bold = false, big = false)
-            TotalRow(stringResource(R.string.checkout_total_ttc), formatEuro(totalTtcCents), bold = true, big = true)
             Spacer(Modifier.height(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -671,9 +737,10 @@ private fun TotalBar(
                     }
                 }
             }
-        }
-    }
-}
+            } }  // fin Column inner + AnimatedVisibility
+        }      // fin Column racine Surface
+    }          // fin Surface
+}              // fin TotalBar
 
 @Composable
 private fun TotalRow(label: String, value: String, bold: Boolean, big: Boolean) {
@@ -699,6 +766,92 @@ internal fun formatEuro(cents: Int): String {
     val euros = cents / 100
     val remainder = cents % 100
     return "%d,%02d €".format(euros, remainder)
+}
+
+/**
+ * Dialog d'édition d'une ligne existante du panier. Même structure que
+ * [EditLastScanDialog] mais sans hint "annule le dernier scan" (ici
+ * l'édition est en-place, sans fusion/décalage).
+ */
+@Composable
+private fun EditCartLineDialog(
+    line: com.belijolie.scanner.cart.CartLine,
+    categories: List<com.belijolie.scanner.data.entity.Category>,
+    onDismiss: () -> Unit,
+    onConfirm: (categoryName: String, priceCents: Int, quantity: Int) -> Unit,
+) {
+    var categoryName by remember { mutableStateOf(line.categoryName) }
+    var qtyText by remember { mutableStateOf(line.quantity.toString()) }
+    var priceText by remember {
+        mutableStateOf("%d.%02d".format(line.unitPriceCents / 100, line.unitPriceCents % 100))
+    }
+    var expanded by remember { mutableStateOf(false) }
+
+    val qty = qtyText.toIntOrNull()?.coerceAtLeast(1)
+    val priceCents = run {
+        val n = priceText.replace(',', '.').toDoubleOrNull()
+        if (n == null || n < 0) null else (n * 100).toInt()
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.checkout_line_edit)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column {
+                    Text(stringResource(R.string.checkout_header_category), fontSize = 12.sp, color = Color.Gray)
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White, RoundedCornerShape(6.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
+                            .clickable { expanded = true }
+                            .padding(horizontal = 12.dp, vertical = 14.dp)
+                    ) {
+                        Text(categoryName.ifBlank { "—" }, fontSize = 15.sp)
+                    }
+                    androidx.compose.material3.DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                    ) {
+                        categories.forEach { c ->
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(c.name) },
+                                onClick = {
+                                    categoryName = c.name
+                                    expanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+                AppTextField(
+                    value = qtyText,
+                    onValueChange = { qtyText = it.filter { c -> c.isDigit() } },
+                    label = stringResource(R.string.checkout_quantity),
+                    mode = KeyboardMode.NUMBER,
+                )
+                AppTextField(
+                    value = priceText,
+                    onValueChange = { priceText = it },
+                    label = stringResource(R.string.product_price),
+                    mode = KeyboardMode.DECIMAL,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = categoryName.isNotBlank() && qty != null && priceCents != null,
+                onClick = {
+                    if (qty != null && priceCents != null) {
+                        onConfirm(categoryName, priceCents, qty)
+                    }
+                }
+            ) { Text(stringResource(R.string.common_save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } }
+    )
 }
 
 /**
