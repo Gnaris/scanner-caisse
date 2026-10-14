@@ -13,9 +13,11 @@ import com.belijolie.scanner.data.SettingsStore
 import com.belijolie.scanner.data.entity.Category
 import com.belijolie.scanner.data.entity.Product
 import com.belijolie.scanner.data.entity.ProductWithCategory
+import com.belijolie.scanner.R
 import com.belijolie.scanner.export.ChannelExporter
 import com.belijolie.scanner.export.ExportFormat
 import com.belijolie.scanner.printer.EscPosPrinter
+import com.belijolie.scanner.printer.TicketLang
 import com.belijolie.scanner.scanner.ScanEventBus
 import com.belijolie.scanner.util.toHumanMessage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -86,7 +88,10 @@ class CheckoutViewModel(
             productId = product.product.id,
             barcode = product.product.barcode,
             categoryName = product.category.name,
-            priceCents = product.product.priceCents
+            priceCents = product.product.priceCents,
+            categoryNameEn = product.category.nameEn,
+            nameEn = product.product.nameEn,
+            sageArticleCode = product.category.sageArticleCode
         )
     }
 
@@ -117,10 +122,11 @@ class CheckoutViewModel(
 
     fun exportChannel(id: String, format: ExportFormat) {
         viewModelScope.launch {
+            val ctx = ScannerApp.instance.applicationContext
             val st = channelsRepo.current()
             val channel = st.channels.firstOrNull { it.id == id } ?: return@launch
             if (channel.lines.isEmpty()) {
-                _exportResult.value = PrintResult(false, "Panier vide")
+                _exportResult.value = PrintResult(false, ctx.getString(R.string.checkout_cart_empty))
                 return@launch
             }
             val settings: AppSettings = settingsStore.settings.first()
@@ -128,9 +134,8 @@ class CheckoutViewModel(
             val result = ChannelExporter.exportChannel(settings, channel, format)
             _isExporting.value = false
             result.onSuccess { filename ->
-                _exportResult.value = PrintResult(true, "Export envoyé : $filename")
+                _exportResult.value = PrintResult(true, ctx.getString(R.string.checkout_export_sent, filename))
             }.onFailure { e ->
-                val ctx = ScannerApp.instance.applicationContext
                 _exportResult.value = PrintResult(false, e.toHumanMessage(ctx))
             }
         }
@@ -154,7 +159,10 @@ class CheckoutViewModel(
                     productId = existing.product.id,
                     barcode = existing.product.barcode,
                     categoryName = existing.category.name,
-                    priceCents = existing.product.priceCents
+                    priceCents = existing.product.priceCents,
+                    categoryNameEn = existing.category.nameEn,
+                    nameEn = existing.product.nameEn,
+                    sageArticleCode = existing.category.sageArticleCode
                 )
                 _unknownBarcode.value = null
                 return@launch
@@ -168,8 +176,15 @@ class CheckoutViewModel(
                 _printResult.value = PrintResult(false, "Impossible de créer le produit : code-barre déjà utilisé.")
                 return@launch
             }
-            val categoryName = db.categoryDao().getById(categoryId)?.name ?: return@launch
-            channelsRepo.addProductToActive(id, cleanedBarcode, categoryName, priceCents)
+            val category = db.categoryDao().getById(categoryId) ?: return@launch
+            channelsRepo.addProductToActive(
+                productId = id,
+                barcode = cleanedBarcode,
+                categoryName = category.name,
+                priceCents = priceCents,
+                categoryNameEn = category.nameEn,
+                sageArticleCode = category.sageArticleCode
+            )
             _unknownBarcode.value = null
         }
     }
@@ -186,7 +201,10 @@ class CheckoutViewModel(
                 productId = product.product.id,
                 barcode = product.product.barcode,
                 categoryName = product.category.name,
-                priceCents = product.product.priceCents
+                priceCents = product.product.priceCents,
+                categoryNameEn = product.category.nameEn,
+                nameEn = product.product.nameEn,
+                sageArticleCode = product.category.sageArticleCode
             )
             _unknownBarcode.value = null
         }
@@ -218,28 +236,44 @@ class CheckoutViewModel(
     /**
      * Manually add a line to the active channel (no DB product, no barcode).
      * Merges with an existing line if (category, price) matches.
+     *
+     * Si [nameEn] est fourni il surcharge toute traduction venant de la DB.
+     * Sinon on tente de retrouver la catégorie par nom pour récupérer son
+     * nameEn (utile pour l'impression ticket EN).
+     *
+     * Volontairement : pas de sageArticleCode stocké pour les lignes manuelles —
+     * à l'export Sage, elles tombent sur settings.sageManualArticleCode
+     * (détecté via barcode vide).
      */
-    fun addManualToCart(categoryName: String, priceCents: Int) {
+    fun addManualToCart(categoryName: String, priceCents: Int, nameEn: String? = null) {
         viewModelScope.launch {
             val st = channelsRepo.current()
             if (st.activeChannelId == null) {
                 channelsRepo.createChannel("Client 1")
             }
+            val cleanedCat = categoryName.trim()
+            val cleanedNameEn = nameEn?.trim()?.takeIf { it.isNotEmpty() }
+            // Si la catégorie existe en DB, on hérite de son nameEn comme fallback
+            // (sauf si l'utilisateur a fourni un nameEn custom qui prend le dessus).
+            val fallbackCatEn = db.categoryDao().findByName(cleanedCat)?.nameEn
             channelsRepo.addProductToActive(
                 productId = -System.currentTimeMillis(),
                 barcode = "",
-                categoryName = categoryName.trim(),
-                priceCents = priceCents
+                categoryName = cleanedCat,
+                priceCents = priceCents,
+                categoryNameEn = fallbackCatEn,
+                nameEn = cleanedNameEn
             )
         }
     }
 
-    fun printActive() {
+    fun printActive(lang: TicketLang = TicketLang.FR) {
         viewModelScope.launch {
+            val ctx = ScannerApp.instance.applicationContext
             val st = channelsRepo.current()
             val active = st.channels.firstOrNull { it.id == st.activeChannelId } ?: return@launch
             if (active.lines.isEmpty()) {
-                _printResult.value = PrintResult(false, "Panier vide")
+                _printResult.value = PrintResult(false, ctx.getString(R.string.checkout_cart_empty))
                 return@launch
             }
             val settings: AppSettings = settingsStore.settings.first()
@@ -247,16 +281,17 @@ class CheckoutViewModel(
             val result = runCatching {
                 EscPosPrinter.printReceipt(
                     settings = settings,
-                    lines = sortLines(active.lines)
+                    lines = sortLines(active.lines),
+                    lang = lang
                 )
             }
             _isPrinting.value = false
             if (result.isSuccess) {
                 channelsRepo.bumpTicketNumber()
-                _printResult.value = PrintResult(true, "Ticket imprimé")
+                _printResult.value = PrintResult(true, ctx.getString(R.string.checkout_ticket_printed))
             } else {
-                val ctx = ScannerApp.instance.applicationContext
-                val msg = result.exceptionOrNull()?.toHumanMessage(ctx) ?: "Erreur inconnue"
+                val msg = result.exceptionOrNull()?.toHumanMessage(ctx)
+                    ?: ctx.getString(R.string.common_error)
                 _printResult.value = PrintResult(false, msg)
             }
         }

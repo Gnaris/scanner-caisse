@@ -13,16 +13,20 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.belijolie.scanner.scanner.ScanReceiver
 import com.belijolie.scanner.ui.Destination
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import com.belijolie.scanner.ui.categories.CategoriesScreen
@@ -30,6 +34,8 @@ import com.belijolie.scanner.ui.checkout.CheckoutScreen
 import com.belijolie.scanner.ui.products.ProductsScreen
 import com.belijolie.scanner.ui.settings.SettingsScreen
 import com.belijolie.scanner.ui.theme.ScannerTheme
+import com.belijolie.scanner.update.UpdateDialog
+import com.belijolie.scanner.update.UpdateState
 
 class MainActivity : ComponentActivity() {
 
@@ -64,17 +70,40 @@ private fun AppRoot() {
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route ?: Destination.Checkout.route
 
+    val updateManager = ScannerApp.instance.updateManager
+    val updateState by updateManager.state.collectAsStateWithLifecycle()
+
+    // Check silencieux 3s après le lancement : si pas de MAJ, aucun dialog
+    // n'apparaît ; si une MAJ est dispo, UpdateDialog s'affiche automatiquement.
+    LaunchedEffect(Unit) {
+        delay(3_000)
+        updateManager.checkForUpdate(silent = true)
+    }
+
+    if (updateState !is UpdateState.Idle &&
+        updateState !is UpdateState.Checking &&
+        updateState !is UpdateState.UpToDate
+    ) {
+        UpdateDialog(
+            state = updateState,
+            onDismiss = { updateManager.reset() },
+        )
+    }
+
     Scaffold(
         bottomBar = {
             // NavigationBar par défaut = 80.dp — trop haut pour un PDA. On
             // compresse à 54 dp (sans label) et on force une icône 20 dp pour
             // libérer de la place sur l'écran de caisse.
             NavigationBar(
-                modifier = Modifier.height(54.dp),
+                // Barre un peu plus haute (62.dp au lieu de 54.dp) pour laisser
+                // la place aux labels sur 2 lignes (FR puis 中文).
+                modifier = Modifier.height(62.dp),
                 windowInsets = WindowInsets(0),
                 tonalElevation = 2.dp
             ) {
                 Destination.entries.forEach { dest ->
+                    val label = stringResource(dest.labelRes)
                     NavigationBarItem(
                         selected = currentRoute == dest.route,
                         onClick = {
@@ -89,12 +118,18 @@ private fun AppRoot() {
                         icon = {
                             Icon(
                                 dest.icon,
-                                contentDescription = dest.label,
+                                contentDescription = label,
                                 modifier = Modifier.size(20.dp)
                             )
                         },
                         label = {
-                            Text(dest.label, fontSize = 10.sp, maxLines = 1)
+                            Text(
+                                label,
+                                fontSize = 9.sp,
+                                maxLines = 2,
+                                lineHeight = 10.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
                         },
                         alwaysShowLabel = true,
                         colors = NavigationBarItemDefaults.colors()

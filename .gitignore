@@ -17,3 +17,12 @@ pc-listener/build/
 pc-listener/dist/
 pc-listener/__pycache__/
 pc-listener/*.spec
+
+# Signature release Android — NE JAMAIS COMMIT.
+# Perdre ce fichier = plus jamais de MAJ possible sur les devices existants.
+keystore.properties
+*.jks
+*.keystore
+
+# État local de l'outil Claude Code (lock de tâches planifiées, etc.)
+.claude/

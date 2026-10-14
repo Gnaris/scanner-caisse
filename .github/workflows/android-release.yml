@@ -1,0 +1,89 @@
+name: android release
+
+# Déclenchement : push d'un tag `app-v*` (ex. app-v1.1.0).
+# Produit l'APK release signé et le publie dans une GitHub Release.
+# Les PDA installés chez le client regardent cette release pour auto-update.
+
+on:
+  push:
+    tags:
+      - 'app-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          # app-v1.2.3 → 1.2.3
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#app-v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # versionCode = major*10000 + minor*100 + patch (ex. 1.2.3 → 10203)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          CODE=$((10#$MAJOR * 10000 + 10#$MINOR * 100 + 10#$PATCH))
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION (code=$CODE)"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Decode keystore
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Secret ANDROID_KEYSTORE_B64 manquant"
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > app/belijolie-release.jks
+          ls -la app/belijolie-release.jks
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build release APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease \
+            -PversionName=${{ steps.version.outputs.version }} \
+            -PversionCode=${{ steps.version.outputs.code }} \
+            -PkeystoreFile=app/belijolie-release.jks \
+            -PkeystorePassword="$KEYSTORE_PASSWORD" \
+            -PkeyAlias="$KEY_ALIAS" \
+            -PkeyPassword="$KEY_PASSWORD"
+
+      - name: Rename APK
+        id: apk
+        shell: bash
+        run: |
+          V="${{ steps.version.outputs.version }}"
+          SRC="app/build/outputs/apk/release/app-release.apk"
+          DST="scanner-caisse-$V.apk"
+          cp "$SRC" "$DST"
+          ls -la "$DST"
+          echo "path=$DST" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Scanner Caisse v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: ${{ steps.apk.outputs.path }}

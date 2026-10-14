@@ -1,9 +1,25 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
 }
+
+// Charge keystore.properties (git-ignored) si présent. En CI, les valeurs
+// viennent soit de -P... (gradle properties) soit de variables d'environnement.
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        keystorePropsFile.inputStream().use { load(it) }
+    }
+}
+
+fun resolveProp(name: String): String? =
+    (findProperty(name) as? String)
+        ?: keystoreProps.getProperty(name)
+        ?: System.getenv(name)
 
 android {
     namespace = "com.belijolie.scanner"
@@ -13,9 +29,26 @@ android {
         applicationId = "com.belijolie.scanner"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // versionCode / versionName peuvent être overridés par la CI
+        // via -PversionCode=... -PversionName=...
+        versionCode = (resolveProp("versionCode") ?: "1").toInt()
+        versionName = resolveProp("versionName") ?: "1.0.0"
         vectorDrawables { useSupportLibrary = true }
+
+        // Repo GitHub consulté par l'updater pour trouver la dernière Release.
+        buildConfigField("String", "GITHUB_REPO", "\"Gnaris/scanner-caisse\"")
+    }
+
+    signingConfigs {
+        create("release") {
+            val keyFile = resolveProp("keystoreFile")?.let { rootProject.file(it) }
+            if (keyFile != null && keyFile.exists()) {
+                storeFile = keyFile
+                storePassword = resolveProp("keystorePassword")
+                keyAlias = resolveProp("keyAlias")
+                keyPassword = resolveProp("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -25,6 +58,15 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Signe en release si le keystore est présent, sinon fallback debug
+            // (permet de builder localement sans credentials ; l'APK obtenu est
+            // installable via adb mais ne doit JAMAIS être publié en release).
+            val releaseSigning = signingConfigs.getByName("release")
+            signingConfig = if (releaseSigning.storeFile?.exists() == true) {
+                releaseSigning
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
@@ -39,6 +81,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {

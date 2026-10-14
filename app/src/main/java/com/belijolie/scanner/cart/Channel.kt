@@ -9,7 +9,17 @@ data class CartLine(
     val barcode: String,
     val categoryName: String,
     val unitPriceCents: Int,
-    val quantity: Int
+    val quantity: Int,
+    // Traduction anglaise de la catégorie (snapshot au moment de l'ajout).
+    // Utilisée pour imprimer le ticket en EN. Null → retomber sur categoryName.
+    val categoryNameEn: String? = null,
+    // Nom spécifique anglais de ce produit (uniquement pour produits manuels
+    // avec traduction custom). Surcharge categoryNameEn à l'impression EN.
+    val nameEn: String? = null,
+    // Code article Sage 50 propre à la catégorie du produit (snapshot).
+    // Null pour les produits manuels (= barcode vide) : l'export Sage utilise
+    // alors settings.sageManualArticleCode à la place.
+    val sageArticleCode: String? = null
 )
 
 @Serializable
@@ -26,16 +36,43 @@ data class Channel(
      * deleted and re-created, or if two distinct products share identical
      * category and price.
      */
-    fun addProduct(productId: Long, barcode: String, categoryName: String, priceCents: Int): Channel {
+    fun addProduct(
+        productId: Long,
+        barcode: String,
+        categoryName: String,
+        priceCents: Int,
+        categoryNameEn: String? = null,
+        nameEn: String? = null,
+        sageArticleCode: String? = null
+    ): Channel {
         val existing = lines.indexOfFirst {
             it.categoryName == categoryName && it.unitPriceCents == priceCents
         }
         val newLines = if (existing >= 0) {
             lines.toMutableList().also {
-                it[existing] = it[existing].copy(quantity = it[existing].quantity + 1)
+                // Fusion : incrémente la quantité et rafraîchit les champs
+                // "snapshot" (EN / sage) si la nouvelle valeur n'est pas null —
+                // utile quand on scanne la 1re fois une catégorie qui vient
+                // d'être enrichie en DB.
+                val current = it[existing]
+                it[existing] = current.copy(
+                    quantity = current.quantity + 1,
+                    categoryNameEn = categoryNameEn ?: current.categoryNameEn,
+                    nameEn = nameEn ?: current.nameEn,
+                    sageArticleCode = sageArticleCode ?: current.sageArticleCode
+                )
             }
         } else {
-            lines + CartLine(productId, barcode, categoryName, priceCents, 1)
+            lines + CartLine(
+                productId = productId,
+                barcode = barcode,
+                categoryName = categoryName,
+                unitPriceCents = priceCents,
+                quantity = 1,
+                categoryNameEn = categoryNameEn,
+                nameEn = nameEn,
+                sageArticleCode = sageArticleCode
+            )
         }
         return copy(lines = newLines)
     }

@@ -22,7 +22,7 @@ class CategoriesViewModel(private val db: AppDatabase) : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    fun add(name: String) {
+    fun add(name: String, nameEn: String?, sageArticleCode: String?) {
         viewModelScope.launch {
             val cleaned = name.trim()
             if (cleaned.isEmpty()) return@launch
@@ -31,8 +31,15 @@ class CategoriesViewModel(private val db: AppDatabase) : ViewModel() {
                 _error.value = "La catégorie « ${existing.name} » existe déjà."
                 return@launch
             }
-            runCatching { db.categoryDao().insert(Category(name = cleaned)) }
-                .onFailure { _error.value = "Impossible d'ajouter cette catégorie." }
+            runCatching {
+                db.categoryDao().insert(
+                    Category(
+                        name = cleaned,
+                        nameEn = nameEn?.trim()?.takeIf { it.isNotEmpty() },
+                        sageArticleCode = sageArticleCode?.trim()?.takeIf { it.isNotEmpty() }
+                    )
+                )
+            }.onFailure { _error.value = "Impossible d'ajouter cette catégorie." }
         }
     }
 
@@ -43,19 +50,28 @@ class CategoriesViewModel(private val db: AppDatabase) : ViewModel() {
         }
     }
 
-    fun rename(category: Category, newName: String) {
+    fun update(category: Category, newName: String, nameEn: String?, sageArticleCode: String?) {
         viewModelScope.launch {
-            val cleaned = newName.trim()
-            if (cleaned.isEmpty() || cleaned.equals(category.name, ignoreCase = true)) return@launch
-            val existing = db.categoryDao().findByName(cleaned)
-            if (existing != null && existing.id != category.id) {
-                _error.value = "Une catégorie « ${existing.name} » existe déjà."
-                return@launch
+            val cleanedName = newName.trim()
+            if (cleanedName.isEmpty()) return@launch
+            // Vérifier conflit de nom si on renomme vers un autre nom
+            if (!cleanedName.equals(category.name, ignoreCase = true)) {
+                val existing = db.categoryDao().findByName(cleanedName)
+                if (existing != null && existing.id != category.id) {
+                    _error.value = "Une catégorie « ${existing.name} » existe déjà."
+                    return@launch
+                }
             }
             runCatching {
-                db.categoryDao().update(category.copy(name = cleaned))
+                db.categoryDao().update(
+                    category.copy(
+                        name = cleanedName,
+                        nameEn = nameEn?.trim()?.takeIf { it.isNotEmpty() },
+                        sageArticleCode = sageArticleCode?.trim()?.takeIf { it.isNotEmpty() }
+                    )
+                )
             }.onFailure {
-                _error.value = "Impossible de renommer : nom déjà utilisé ?"
+                _error.value = "Impossible de mettre à jour la catégorie."
             }
         }
     }

@@ -135,10 +135,12 @@ private fun KeyboardDialog(
     val focusRequester = remember { FocusRequester() }
     val localView = LocalView.current
 
-    // Masquer l'IME SYSTÈME sur la fenêtre de ce Dialog : on utilise notre
-    // propre clavier, mais on garde readOnly=false sur le BasicTextField pour
-    // que le curseur, les poignées de sélection bleues et le menu natif
-    // (Tout sélectionner / Copier / Coller) s'affichent correctement.
+    // Garde-fou : on force quand même SOFT_INPUT_STATE_ALWAYS_HIDDEN sur la
+    // fenêtre du Dialog. Mais la vraie barrière anti-IME, c'est `readOnly=true`
+    // sur le BasicTextField plus bas — ce flag seul ne suffit pas quand le
+    // KeyboardDialog est empilé par-dessus un AlertDialog (le clavier Android
+    // réapparaissait au focus). readOnly=true coupe l'IME sans impact : nos
+    // touches custom modifient `value` directement via onChange.
     LaunchedEffect(Unit) {
         val dialogWindow = (localView.parent as? DialogWindowProvider)?.window
         dialogWindow?.setSoftInputMode(
@@ -248,12 +250,15 @@ private fun KeyboardDialog(
                             selection = newTfv.selection
                             if (newTfv.text != value) onChange(newTfv.text)
                         },
-                        // readOnly = false → curseur bleu visible, poignées de
-                        // sélection bleues, menu natif Tout sélectionner /
-                        // Copier / Coller actif. L'IME système est bloquée par
-                        // SOFT_INPUT_STATE_ALWAYS_HIDDEN sur la fenêtre du
-                        // Dialog, donc notre clavier reste le seul utilisé.
-                        readOnly = false,
+                        // readOnly = true : garantit que le clavier Android ne
+                        // s'ouvre JAMAIS, même quand le KeyboardDialog est
+                        // empilé par-dessus un AlertDialog (cas où
+                        // SOFT_INPUT_STATE_ALWAYS_HIDDEN ne suffit pas). Le
+                        // curseur bleu, les poignées de sélection et le menu
+                        // natif Tout sélectionner / Copier restent actifs en
+                        // readOnly. La saisie n'est pas impactée : nos touches
+                        // custom appellent onChange() directement.
+                        readOnly = true,
                         textStyle = TextStyle(
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Medium,

@@ -1,6 +1,8 @@
 package com.belijolie.scanner.ui.categories
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +19,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -28,13 +31,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.belijolie.scanner.R
 import com.belijolie.scanner.data.entity.Category
 import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
+import com.belijolie.scanner.util.CategoryTranslator
 
 @Composable
 fun CategoriesScreen(
@@ -43,21 +49,24 @@ fun CategoriesScreen(
     val categories by vm.categories.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     var showAdd by remember { mutableStateOf(false) }
-    var categoryToRename by remember { mutableStateOf<Category?>(null) }
+    var categoryToEdit by remember { mutableStateOf<Category?>(null) }
 
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = { showAdd = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Ajouter")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.common_add))
             }
         }
     ) { padding ->
         if (categories.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 Text(
-                    "Aucune catégorie. Appuie sur + pour en créer.",
-                    modifier = Modifier.align(Alignment.Center),
-                    color = Color.Gray
+                    stringResource(R.string.category_empty),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(horizontal = 32.dp),
+                    color = Color.Gray,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
             }
         } else {
@@ -70,12 +79,28 @@ fun CategoriesScreen(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(c.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                        IconButton(onClick = { categoryToRename = c }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Renommer")
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(c.name, fontWeight = FontWeight.SemiBold)
+                            // Métadonnées complémentaires (EN / code Sage) affichées en petit
+                            // dessous du nom pour que l'utilisateur voie d'un coup d'œil
+                            // ce qui est configuré sans ouvrir la fiche.
+                            val meta = buildList {
+                                c.nameEn?.takeIf { it.isNotBlank() }?.let { add("EN : $it") }
+                                c.sageArticleCode?.takeIf { it.isNotBlank() }?.let { add("Sage : $it") }
+                            }.joinToString(" · ")
+                            if (meta.isNotEmpty()) {
+                                Text(
+                                    meta,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+                        IconButton(onClick = { categoryToEdit = c }) {
+                            Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.common_edit))
                         }
                         IconButton(onClick = { vm.delete(c) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Supprimer")
+                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.common_delete))
                         }
                     }
                     HorizontalDivider()
@@ -85,55 +110,31 @@ fun CategoriesScreen(
     }
 
     if (showAdd) {
-        var name by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showAdd = false },
-            title = { Text("Nouvelle catégorie") },
-            text = {
-                AppTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = "Nom",
-                    mode = KeyboardMode.TEXT
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = name.isNotBlank(),
-                    onClick = {
-                        vm.add(name)
-                        showAdd = false
-                    }
-                ) { Text("Ajouter") }
-            },
-            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("Annuler") } }
+        CategoryEditDialog(
+            title = stringResource(R.string.category_add_title),
+            confirmLabel = stringResource(R.string.common_add),
+            initialName = "",
+            initialNameEn = "",
+            initialSage = "",
+            onDismiss = { showAdd = false },
+            onConfirm = { name, nameEn, sage ->
+                vm.add(name, nameEn, sage)
+                showAdd = false
+            }
         )
     }
 
-    categoryToRename?.let { cat ->
-        var newName by remember(cat.id) { mutableStateOf(cat.name) }
-        AlertDialog(
-            onDismissRequest = { categoryToRename = null },
-            title = { Text("Renommer la catégorie") },
-            text = {
-                AppTextField(
-                    value = newName,
-                    onValueChange = { newName = it },
-                    label = "Nouveau nom",
-                    mode = KeyboardMode.TEXT
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = newName.isNotBlank() && newName != cat.name,
-                    onClick = {
-                        vm.rename(cat, newName)
-                        categoryToRename = null
-                    }
-                ) { Text("Renommer") }
-            },
-            dismissButton = {
-                TextButton(onClick = { categoryToRename = null }) { Text("Annuler") }
+    categoryToEdit?.let { cat ->
+        CategoryEditDialog(
+            title = stringResource(R.string.category_edit_title),
+            confirmLabel = stringResource(R.string.common_save),
+            initialName = cat.name,
+            initialNameEn = cat.nameEn.orEmpty(),
+            initialSage = cat.sageArticleCode.orEmpty(),
+            onDismiss = { categoryToEdit = null },
+            onConfirm = { name, nameEn, sage ->
+                vm.update(cat, name, nameEn, sage)
+                categoryToEdit = null
             }
         )
     }
@@ -141,9 +142,77 @@ fun CategoriesScreen(
     error?.let { msg ->
         AlertDialog(
             onDismissRequest = vm::dismissError,
-            title = { Text("Erreur") },
+            title = { Text(stringResource(R.string.common_error)) },
             text = { Text(msg) },
-            confirmButton = { TextButton(onClick = vm::dismissError) { Text("OK") } }
+            confirmButton = { TextButton(onClick = vm::dismissError) { Text(stringResource(R.string.common_ok)) } }
         )
     }
+}
+
+@Composable
+private fun CategoryEditDialog(
+    title: String,
+    confirmLabel: String,
+    initialName: String,
+    initialNameEn: String,
+    initialSage: String,
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, nameEn: String, sage: String) -> Unit
+) {
+    var name by remember { mutableStateOf(initialName) }
+    var nameEn by remember { mutableStateOf(initialNameEn) }
+    // Mémorise la dernière suggestion acceptée pour ne pas écraser une saisie
+    // manuelle de l'utilisateur. On ne remplit nameEn automatiquement que tant
+    // que son contenu correspond encore à la précédente suggestion.
+    var lastSuggestion by remember { mutableStateOf(initialNameEn) }
+    var sage by remember { mutableStateOf(initialSage) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                AppTextField(
+                    value = name,
+                    onValueChange = { newName ->
+                        name = newName
+                        // Suggestion auto de la traduction tant que le champ EN est
+                        // vide OU qu'il contient encore notre précédente suggestion
+                        // (donc "pas touché par l'utilisateur").
+                        val suggestion = CategoryTranslator.suggestEnglishName(newName).orEmpty()
+                        if (nameEn.isBlank() || nameEn == lastSuggestion) {
+                            nameEn = suggestion
+                            lastSuggestion = suggestion
+                        }
+                    },
+                    label = stringResource(R.string.category_name_fr),
+                    mode = KeyboardMode.TEXT
+                )
+                AppTextField(
+                    value = nameEn,
+                    onValueChange = { nameEn = it },
+                    label = stringResource(R.string.category_name_en),
+                    mode = KeyboardMode.TEXT
+                )
+                AppTextField(
+                    value = sage,
+                    onValueChange = { sage = it },
+                    label = stringResource(R.string.category_sage_code),
+                    mode = KeyboardMode.TEXT
+                )
+                Text(
+                    stringResource(R.string.category_sage_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = name.isNotBlank(),
+                onClick = { onConfirm(name, nameEn, sage) }
+            ) { Text(confirmLabel) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } }
+    )
 }

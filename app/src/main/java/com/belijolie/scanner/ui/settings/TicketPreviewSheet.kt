@@ -3,6 +3,7 @@ package com.belijolie.scanner.ui.settings
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,11 +26,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -37,9 +42,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.belijolie.scanner.R
 import com.belijolie.scanner.cart.CartLine
 import com.belijolie.scanner.data.AppSettings
 import com.belijolie.scanner.printer.TicketImage
+import com.belijolie.scanner.printer.TicketLabels
+import com.belijolie.scanner.printer.TicketLang
+import com.belijolie.scanner.printer.resolveLineDisplayName
 import com.belijolie.scanner.ui.checkout.sortLines
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -52,6 +61,8 @@ import java.util.Locale
  * exactement les mêmes largeurs que [com.belijolie.scanner.printer.EscPosPrinter]
  * pour que l'alignement reflète fidèlement le rendu papier.
  *
+ * Un toggle FR / EN permet de voir les deux versions du ticket.
+ *
  * Attention : les constantes de mise en page doivent rester synchronisées avec
  * `EscPosPrinter`. Si tu changes CHARS_PER_LINE ou les largeurs de colonnes
  * là-bas, mets à jour les constantes ci-dessous.
@@ -61,29 +72,66 @@ fun TicketPreviewSheet(
     settings: AppSettings,
     onDismiss: () -> Unit
 ) {
-    val sampleLines = listOf(
-        CartLine(productId = 1L, barcode = "ex-1", categoryName = "Robe", unitPriceCents = 2917, quantity = 1),
-        CartLine(productId = 2L, barcode = "ex-2", categoryName = "Pantalon", unitPriceCents = 2083, quantity = 2),
-        CartLine(productId = 3L, barcode = "ex-3", categoryName = "Foulard", unitPriceCents = 1250, quantity = 1),
-        CartLine(productId = 4L, barcode = "ex-4", categoryName = "Accessoires", unitPriceCents = 500, quantity = 3)
-    )
+    var lang by remember { mutableStateOf(TicketLang.FR) }
+    val labels = TicketLabels.of(lang)
+
+    val sampleLines = remember {
+        listOf(
+            CartLine(1L, "ex-1", "Boucles", 2917, 1, categoryNameEn = "Earrings"),
+            CartLine(2L, "ex-2", "Bracelet", 2083, 2, categoryNameEn = "Bracelet"),
+            CartLine(3L, "ex-3", "Collier", 1250, 1, categoryNameEn = "Necklace"),
+            CartLine(4L, "ex-4", "Accessoires", 500, 3, categoryNameEn = "Accessories")
+        )
+    }
     val sortedLines = remember { sortLines(sampleLines) }
     val totalHt = sortedLines.sumOf { it.unitPriceCents * it.quantity }
     val totalTva = Math.round(totalHt * 0.20).toInt()
     val totalTtc = totalHt + totalTva
     val totalQty = sortedLines.sumOf { it.quantity }
 
-    val qrBitmap: Bitmap? = remember(settings.microstoreQr, settings.microstoreCode, settings.websiteUrl) {
-        if (settings.microstoreQr.isNotBlank() || settings.websiteUrl.isNotBlank()) {
-            TicketImage.composeDoubleQrSection(settings.microstoreQr, settings.microstoreCode, settings.websiteUrl)
-        } else null
+    // Layout dynamique des QR (0, 1, 2 ou 3) : mêmes règles que l'impression
+    // réelle (voir EscPosPrinter.printReceipt).
+    val qrBitmaps: List<Bitmap> = remember(
+        settings.microstoreQr, settings.microstoreCode,
+        settings.websiteUrl, settings.googleReviewUrl, lang
+    ) {
+        val qrLabels = TicketLabels.of(lang)
+        val microstore = settings.microstoreQr.takeIf { it.isNotBlank() }?.let {
+            TicketImage.QrEntry(qrLabels.microstore, it, settings.microstoreCode)
+        }
+        val boutique = settings.websiteUrl.takeIf { it.isNotBlank() }?.let {
+            TicketImage.QrEntry(qrLabels.onlineShop, it, TicketImage.truncateForWidth(it, 24))
+        }
+        val avis = settings.googleReviewUrl.takeIf { it.isNotBlank() }
+        val entries = listOfNotNull(microstore, boutique)
+        when {
+            entries.size == 2 && avis != null -> listOf(
+                TicketImage.composeDoubleQrSection(entries[0], entries[1]),
+                TicketImage.composeReviewQrSection(avis, lang)
+            )
+            entries.size == 1 && avis != null -> listOf(
+                TicketImage.composeDoubleQrSection(
+                    entries[0],
+                    TicketImage.QrEntry(qrLabels.googleReview, avis)
+                )
+            )
+            entries.size == 2 -> listOf(
+                TicketImage.composeDoubleQrSection(entries[0], entries[1])
+            )
+            entries.size == 1 -> listOf(
+                TicketImage.composeSingleQrSection(entries[0])
+            )
+            entries.isEmpty() && avis != null -> listOf(
+                TicketImage.composeReviewQrSection(avis, lang)
+            )
+            else -> emptyList()
+        }
     }
-    val reviewBitmap: Bitmap? = remember(settings.googleReviewUrl) {
-        if (settings.googleReviewUrl.isNotBlank()) {
-            TicketImage.composeReviewQrSection(settings.googleReviewUrl)
-        } else null
+    val now = remember(lang) {
+        val datePattern = if (lang == TicketLang.EN) "MM/dd/yyyy  HH:mm" else "dd/MM/yyyy  HH:mm"
+        val dateLocale = if (lang == TicketLang.EN) Locale.ENGLISH else Locale.FRANCE
+        SimpleDateFormat(datePattern, dateLocale).format(Date())
     }
-    val now = remember { SimpleDateFormat("dd/MM/yyyy  HH:mm", Locale.FRANCE).format(Date()) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -103,17 +151,19 @@ fun TicketPreviewSheet(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Aperçu du ticket",
+                    stringResource(R.string.preview_title),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
+                LangToggle(current = lang, onChange = { lang = it })
+                Spacer(Modifier.padding(start = 8.dp))
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "Fermer")
+                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.common_close))
                 }
             }
             Text(
-                "Simulation avec des produits d'exemple. Léger écart possible avec le papier.",
+                stringResource(R.string.preview_subtitle),
                 fontSize = 11.sp,
                 color = Color(0xFF4B5563)
             )
@@ -148,7 +198,7 @@ fun TicketPreviewSheet(
                     MonoLine(now)
                     PaperDivider()
 
-                    MonoLine(tableRow("Catégorie", "Qt", "P.U.", "HT"))
+                    MonoLine(tableRow(labels.headerCategory, labels.headerQty, labels.headerUnit, labels.headerNet))
                     PaperDivider()
 
                     var currentCategory: String? = null
@@ -160,8 +210,14 @@ fun TicketPreviewSheet(
                         }
                         val bold = categoryIndex % 2 == 1
                         val lineHt = line.unitPriceCents * line.quantity
+                        val displayName = resolveLineDisplayName(
+                            categoryName = line.categoryName,
+                            categoryNameEn = line.categoryNameEn,
+                            nameEn = line.nameEn,
+                            lang = lang
+                        )
 
-                        val catChunks = line.categoryName.chunked(COL_CAT).ifEmpty { listOf("") }
+                        val catChunks = displayName.chunked(COL_CAT).ifEmpty { listOf("") }
                         catChunks.forEachIndexed { idx, chunk ->
                             val row = if (idx == 0) {
                                 tableRow(
@@ -177,23 +233,15 @@ fun TicketPreviewSheet(
 
                     PaperDivider()
 
-                    TotalLine("Quantité totale", "x$totalQty")
-                    TotalLine("Total HT", "${formatPrice(totalHt)} €")
-                    TotalLine("TVA totale (20%)", "${formatPrice(totalTva)} €")
-                    TotalLine("Total TTC", "${formatPrice(totalTtc)} €", bold = true)
+                    TotalLine(labels.totalQuantity, "x$totalQty")
+                    TotalLine(labels.totalNet, "${formatPrice(totalHt)} €")
+                    TotalLine(labels.totalVat, "${formatPrice(totalTva)} €")
+                    TotalLine(labels.totalGross, "${formatPrice(totalTtc)} €", bold = true)
 
-                    if (qrBitmap != null) {
+                    qrBitmaps.forEach { bmp ->
                         PaperDivider()
                         Image(
-                            bitmap = qrBitmap.asImageBitmap(),
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    if (reviewBitmap != null) {
-                        PaperDivider()
-                        Image(
-                            bitmap = reviewBitmap.asImageBitmap(),
+                            bitmap = bmp.asImageBitmap(),
                             contentDescription = null,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -203,6 +251,32 @@ fun TicketPreviewSheet(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun LangToggle(current: TicketLang, onChange: (TicketLang) -> Unit) {
+    Row(
+        modifier = Modifier
+            .background(Color(0xFFF3F4F6), RoundedCornerShape(8.dp))
+            .padding(2.dp)
+    ) {
+        LangChip("FR", current == TicketLang.FR) { onChange(TicketLang.FR) }
+        LangChip("EN", current == TicketLang.EN) { onChange(TicketLang.EN) }
+    }
+}
+
+@Composable
+private fun LangChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val bg = if (selected) Color(0xFF4F46E5) else Color.Transparent
+    val fg = if (selected) Color.White else Color(0xFF4B5563)
+    Box(
+        modifier = Modifier
+            .background(bg, RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Text(label, color = fg, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

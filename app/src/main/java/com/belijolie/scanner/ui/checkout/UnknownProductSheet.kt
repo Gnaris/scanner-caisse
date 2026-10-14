@@ -40,12 +40,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.belijolie.scanner.R
 import com.belijolie.scanner.data.entity.Category
 import com.belijolie.scanner.data.entity.ProductWithCategory
 import com.belijolie.scanner.ui.keyboard.AppTextField
@@ -89,7 +91,8 @@ fun UnknownProductSheet(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            if (view == View.CREATE) "Produit inconnu — à créer" else "Choisir un produit existant",
+                            if (view == View.CREATE) stringResource(R.string.unknown_create_title)
+                            else stringResource(R.string.unknown_pick_title),
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -99,7 +102,7 @@ fun UnknownProductSheet(
                         }
                     }
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Fermer")
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.common_close))
                     }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -108,7 +111,7 @@ fun UnknownProductSheet(
                     TextButton(onClick = { view = View.CREATE }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = null)
                         Spacer(Modifier.padding(start = 4.dp))
-                        Text("Retour à la création", fontSize = 14.sp)
+                        Text(stringResource(R.string.unknown_back_to_create), fontSize = 14.sp)
                     }
                     Spacer(Modifier.height(8.dp))
                     PickList(existingProducts, onPick)
@@ -127,7 +130,7 @@ fun UnknownProductSheet(
                         ) {
                             TextButton(onClick = { view = View.PICK }) {
                                 Text(
-                                    "Ou choisir dans la liste →",
+                                    stringResource(R.string.unknown_or_pick_from_list),
                                     textDecoration = TextDecoration.Underline,
                                     fontSize = 14.sp
                                 )
@@ -192,7 +195,7 @@ private fun CreateForm(
             ) {
                 Column {
                     Text(
-                        "Nouvelle catégorie",
+                        stringResource(R.string.unknown_new_category),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF1E3A8A)
@@ -201,7 +204,7 @@ private fun CreateForm(
                     AppTextField(
                         value = newCategoryName,
                         onValueChange = { newCategoryName = it },
-                        label = "Nom de la catégorie",
+                        label = stringResource(R.string.unknown_category_name_label),
                         mode = KeyboardMode.TEXT
                     )
                     Spacer(Modifier.height(8.dp))
@@ -209,7 +212,7 @@ private fun CreateForm(
                         TextButton(
                             onClick = { creatingCategory = false; newCategoryName = "" },
                             modifier = Modifier.weight(1f)
-                        ) { Text("Annuler") }
+                        ) { Text(stringResource(R.string.common_cancel)) }
                         Button(
                             onClick = {
                                 val name = newCategoryName.trim()
@@ -225,7 +228,7 @@ private fun CreateForm(
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A8A)),
                             modifier = Modifier.weight(1f)
-                        ) { Text("Créer", color = Color.White) }
+                        ) { Text(stringResource(R.string.unknown_create_short), color = Color.White) }
                     }
                 }
             }
@@ -236,7 +239,8 @@ private fun CreateForm(
         AppTextField(
             value = priceText,
             onValueChange = { priceText = it },
-            label = if (autoCents != null) "Prix (€) — auto-décodé" else "Prix (€)",
+            label = if (autoCents != null) stringResource(R.string.unknown_price_auto)
+            else stringResource(R.string.product_price),
             mode = KeyboardMode.DECIMAL
         )
         Spacer(Modifier.height(16.dp))
@@ -253,7 +257,7 @@ private fun CreateForm(
         ) {
             Icon(Icons.Default.Add, contentDescription = null, tint = Color.White)
             Spacer(Modifier.padding(start = 8.dp))
-            Text("Créer et ajouter au panier", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.unknown_create_cta), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -266,11 +270,13 @@ private fun CategoryDropdown(
     onCreateCategoryClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val selected = categories.firstOrNull { it.id == selectedId }?.name
-        ?: if (categories.isEmpty()) "— Aucune catégorie —" else "— Choisir —"
+    val fallbackLabel = if (categories.isEmpty())
+        stringResource(R.string.unknown_category_dropdown_empty)
+    else stringResource(R.string.unknown_category_dropdown_pick)
+    val selected = categories.firstOrNull { it.id == selectedId }?.name ?: fallbackLabel
 
     Column {
-        Text("Catégorie", fontSize = 12.sp, color = Color.Gray)
+        Text(stringResource(R.string.checkout_header_category), fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(4.dp))
         Box(
             modifier = Modifier
@@ -300,7 +306,7 @@ private fun CategoryDropdown(
                         )
                         Spacer(Modifier.padding(start = 6.dp))
                         Text(
-                            "Nouvelle catégorie",
+                            stringResource(R.string.unknown_new_category),
                             color = Color(0xFF4F46E5),
                             fontWeight = FontWeight.SemiBold
                         )
@@ -321,7 +327,7 @@ private fun PickList(
     onPick: (Long) -> Unit
 ) {
     if (products.isEmpty()) {
-        Text("Aucun produit dans la base pour l'instant.", color = Color.Gray)
+        Text(stringResource(R.string.unknown_no_products), color = Color.Gray)
         return
     }
     LazyColumn(

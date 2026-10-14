@@ -1,5 +1,6 @@
 package com.belijolie.scanner.export
 
+import com.belijolie.scanner.cart.CartLine
 import com.belijolie.scanner.cart.Channel
 import com.belijolie.scanner.data.AppSettings
 import com.belijolie.scanner.ui.checkout.sortLines
@@ -15,6 +16,15 @@ import java.util.Date
 import java.util.Locale
 
 enum class ExportFormat { CSV, JSON, SAGE }
+
+/**
+ * Erreur spécifique à l'export Sage, remontée AVANT la tentative réseau quand
+ * des codes articles manquent (catégorie sans sageArticleCode / aucun
+ * sageManualArticleCode configuré alors qu'il y a des lignes manuelles).
+ * Le ViewModel peut la détecter si besoin, mais côté UI on affiche juste
+ * son message tel quel — il est déjà rédigé pour l'utilisateur.
+ */
+class SageExportValidationException(message: String) : IllegalStateException(message)
 
 /**
  * Envoie le contenu d'un canal vers l'écoute HTTP du PC. Trois formats :
@@ -40,6 +50,15 @@ object ChannelExporter {
                 IllegalStateException("Configure l'URL d'export dans les paramètres")
             )
         }
+
+        // Validation spécifique Sage avant tout appel réseau.
+        if (format == ExportFormat.SAGE) {
+            val validationError = validateSage(channel.lines, settings.sageManualArticleCode.trim())
+            if (validationError != null) {
+                return@withContext Result.failure(SageExportValidationException(validationError))
+            }
+        }
+
         val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.FRANCE).format(Date())
         val safeName = channel.name.replace(Regex("[^A-Za-z0-9_-]"), "_").ifBlank { "canal" }
         val prefix = when (format) {
@@ -80,6 +99,42 @@ object ChannelExporter {
                 conn.disconnect()
             }
         }
+    }
+
+    /**
+     * Vérifie que le panier peut être exporté vers Sage. Retourne un message
+     * d'erreur formaté (plusieurs lignes) ou null si tout est OK.
+     *
+     * Règles :
+     *  - Toute ligne manuelle (barcode vide) nécessite [manualArticleCode]
+     *    non vide dans les paramètres.
+     *  - Toute ligne scannée (barcode non vide) nécessite [CartLine.sageArticleCode]
+     *    non vide (= sa catégorie a été configurée en DB).
+     */
+    private fun validateSage(lines: List<CartLine>, manualArticleCode: String): String? {
+        val hasManualLine = lines.any { it.barcode.isBlank() }
+        val categoriesMissingCode = lines
+            .filter { it.barcode.isNotBlank() && it.sageArticleCode.isNullOrBlank() }
+            .map { it.categoryName }
+            .distinct()
+
+        val errors = mutableListOf<String>()
+        if (hasManualLine && manualArticleCode.isBlank()) {
+            errors += "• Des produits ont été ajoutés manuellement au panier, mais aucun " +
+                "« Code article Sage manuel » n'est renseigné dans les paramètres."
+        }
+        if (categoriesMissingCode.isNotEmpty()) {
+            errors += "• Les catégories suivantes n'ont pas de code article Sage : " +
+                categoriesMissingCode.joinToString(", ") { "« $it »" } + "."
+        }
+
+        return if (errors.isEmpty()) null else buildString {
+            appendLine("Impossible d'exporter vers Sage 50 :")
+            appendLine()
+            errors.forEach { appendLine(it) }
+            appendLine()
+            append("Renseigne les codes articles manquants puis relance l'export.")
+        }.trimEnd()
     }
 
     private fun delimiterForQuery(url: String): String =
@@ -176,6 +231,10 @@ object ChannelExporter {
     //   - encodage Windows-1252, CRLF, décimale virgule, date JJ/MM/AAAA
     //   - Description = RTF single-line pour conserver gras + saut de ligne
     //     à l'import.
+    //   - Les codes articles sont désormais 100% pilotés par l'utilisateur :
+    //     renseignés sur la fiche Catégorie (produits scannés) ou dans
+    //     les Paramètres (produits manuels). validateSage() garantit qu'ils
+    //     sont tous présents avant qu'on arrive ici.
 
     private fun buildSageCsv(channel: Channel, manualArticleCode: String): String = buildString {
         append("TypeLigne;TypePiece;NumPiece;DatePiece;CodeClient;CodeArticle;Quantite;PUHT;TauxTVA;Description\r\n")
@@ -184,13 +243,10 @@ object ChannelExporter {
         append("E;Facture;;$today;$SAGE_CLIENT_CODE;;;;;\r\n")
 
         sortLines(channel.lines).forEach { line ->
-            // Ligne sans code-barre = ajoutée manuellement dans le canal → on
-            // utilise le code article Sage paramétré (ex. ART_MANUEL ou code
-            // générique défini dans Sage). Sinon mapping par catégorie classique.
-            val code = if (line.barcode.isBlank() && manualArticleCode.isNotBlank()) {
+            val code = if (line.barcode.isBlank()) {
                 manualArticleCode
             } else {
-                sageArticleFor(line.categoryName)
+                line.sageArticleCode.orEmpty()
             }
             val qty = line.quantity.toString()
             val puht = formatPrice(line.unitPriceCents)
@@ -213,41 +269,6 @@ object ChannelExporter {
         .replace("\\", "\\\\")
         .replace("{", "\\{")
         .replace("}", "\\}")
-
-    /**
-     * Mappe une catégorie libre vers le code article Sage 50 attendu par le
-     * paramétrage du client. Codes basés sur le dossier Sage de Beli & Jolie
-     * (ART0001-ART0019). Catégorie inconnue → code vide → Sage demandera à
-     * l'utilisateur de compléter dans la pièce avant validation.
-     */
-    private fun sageArticleFor(categoryName: String): String {
-        val c = categoryName.lowercase().trim()
-        return when {
-            c.contains("présentoir") || c.contains("presentoir") || c.contains("support") -> "ART0013"
-            c.contains("lot") || c.startsWith("lots ") -> when {
-                c.contains("boucle") -> "ART0009"
-                c.contains("bague") && c.contains("bracelet") -> "ART0015"
-                c.contains("bague") -> "ART0010"
-                c.contains("bracelet") -> "ART0011"
-                c.contains("collier") -> "ART0007"
-                c.contains("pendentif") -> "ART0008"
-                else -> "ART0012"
-            }
-            c.contains("boucle") -> "ART0003"
-            c.contains("jonc") -> "ART0016"
-            c.contains("bracelet") -> "ART0002"
-            c.contains("bague") -> "ART0004"
-            c.contains("collier") -> "ART0001"
-            c.contains("pendentif") -> "ART0014"
-            c.contains("chaîne") && c.contains("cheville") -> "ART0006"
-            c.contains("chaine") && c.contains("cheville") -> "ART0006"
-            c.contains("parure") -> "ART0005"
-            c.contains("broche") -> "ART0018"
-            c.contains("piercing") -> "ART0019"
-            c.contains("sac") || c.contains("pochon") -> "ART0017"
-            else -> ""
-        }
-    }
 
     // ---------------- Helpers communs ----------------
 

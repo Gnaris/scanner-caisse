@@ -49,13 +49,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.belijolie.scanner.R
 import com.belijolie.scanner.cart.Channel
-import com.belijolie.scanner.export.ExportFormat
 import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
 
@@ -78,11 +79,29 @@ fun CheckoutScreen(
             vm.clearPrintResult()
         }
     }
+    // Erreur d'export : on l'affiche dans un AlertDialog (message potentiellement
+    // long, ex. liste des catégories sans code Sage). Les succès restent en
+    // snackbar discret.
+    var exportErrorDialog by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(exportResult) {
-        exportResult?.let {
-            snackbar.showSnackbar(it.message)
+        exportResult?.let { r ->
+            if (r.success) {
+                snackbar.showSnackbar(r.message)
+            } else {
+                exportErrorDialog = r.message
+            }
             vm.clearExportResult()
         }
+    }
+    exportErrorDialog?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { exportErrorDialog = null },
+            title = { Text(stringResource(R.string.export_error_title)) },
+            text = { Text(msg) },
+            confirmButton = {
+                TextButton(onClick = { exportErrorDialog = null }) { Text(stringResource(R.string.common_ok)) }
+            }
+        )
     }
 
     val activeChannel = state.channels.firstOrNull { it.id == state.activeChannelId }
@@ -94,6 +113,7 @@ fun CheckoutScreen(
     var showPrintConfirm by remember { mutableStateOf(false) }
     var showCashPayment by remember { mutableStateOf(false) }
     var showExportFormat by remember { mutableStateOf(false) }
+    var lineToRemove by remember { mutableStateOf<com.belijolie.scanner.cart.CartLine?>(null) }
 
     Column(
         modifier = Modifier
@@ -132,7 +152,7 @@ fun CheckoutScreen(
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Ajouter un produit", color = Color.White, fontSize = 13.sp)
+                Text(stringResource(R.string.checkout_add_product), color = Color.White, fontSize = 13.sp)
             }
         }
 
@@ -143,18 +163,28 @@ fun CheckoutScreen(
                 .padding(horizontal = 10.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Catégorie", modifier = Modifier.weight(2.5f), fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
-            Text("Qté", modifier = Modifier.weight(0.6f), fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
-            Text("Total HT", modifier = Modifier.weight(1.1f), fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.checkout_header_category), modifier = Modifier.weight(2.5f), fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold, lineHeight = 11.sp, maxLines = 2)
+            Text(stringResource(R.string.checkout_header_qty), modifier = Modifier.weight(0.8f), fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold, lineHeight = 11.sp, maxLines = 2)
+            Text(stringResource(R.string.checkout_header_total_ht), modifier = Modifier.weight(1.2f), fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold, lineHeight = 11.sp, maxLines = 2)
             Spacer(Modifier.width(32.dp))
         }
 
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        // Zone panier : fond gris clair pour que les cartes blanches des lignes
+        // ressortent nettement. Padding horizontal 8dp pour aérer les côtés.
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .background(Color(0xFFF3F4F6))
+        ) {
             if (activeChannel == null || activeChannel.lines.isEmpty()) {
                 Text(
-                    "Scanne un produit avec le bouton latéral.",
-                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                    color = Color.Gray
+                    stringResource(R.string.checkout_empty_hint),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(horizontal = 32.dp),
+                    color = Color.Gray,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
             } else {
                 val sortedLines = sortLines(activeChannel.lines)
@@ -168,39 +198,59 @@ fun CheckoutScreen(
                 }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 10.dp)
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     items(sortedLines, key = { it.productId }) { line ->
                         val bold = (categoryIndexByName[line.categoryName] ?: 0) % 2 == 1
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color.White,
+                            tonalElevation = 1.dp,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                line.categoryName,
-                                modifier = Modifier.weight(2.5f),
-                                fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                fontSize = 14.sp
-                            )
-                            Text(
-                                "x${line.quantity}",
-                                modifier = Modifier.weight(0.6f),
-                                fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                fontSize = 14.sp
-                            )
-                            Text(
-                                formatEuro(line.unitPriceCents * line.quantity),
-                                modifier = Modifier.weight(1.1f),
-                                fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                            IconButton(
-                                onClick = { vm.removeLine(line.productId) },
-                                modifier = Modifier.size(32.dp)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Delete, contentDescription = "Retirer", modifier = Modifier.size(18.dp))
+                                Text(
+                                    line.categoryName,
+                                    modifier = Modifier.weight(2.5f),
+                                    fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    "x${line.quantity}",
+                                    modifier = Modifier.weight(0.8f),
+                                    fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    formatEuro(line.unitPriceCents * line.quantity),
+                                    modifier = Modifier.weight(1.2f),
+                                    fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                                // Hitbox visible pour la poubelle : carré rouge
+                                // clair arrondi, plus facile à atteindre au doigt
+                                // sur un PDA et confirmation requise pour éviter
+                                // les suppressions accidentelles.
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(Color(0xFFFEE2E2), RoundedCornerShape(8.dp))
+                                        .clickable { lineToRemove = line },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = stringResource(R.string.checkout_remove_line),
+                                        tint = Color(0xFFB91C1C),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -237,8 +287,8 @@ fun CheckoutScreen(
         AddManualProductSheet(
             categories = categories,
             onDismiss = { showAddManual = false },
-            onConfirm = { categoryName, cents ->
-                vm.addManualToCart(categoryName, cents)
+            onConfirm = { categoryName, cents, nameEn ->
+                vm.addManualToCart(categoryName, cents, nameEn)
                 showAddManual = false
             }
         )
@@ -262,12 +312,12 @@ fun CheckoutScreen(
         var name by remember(channel.id) { mutableStateOf(channel.name) }
         AlertDialog(
             onDismissRequest = { channelToRename = null },
-            title = { Text("Renommer le canal") },
+            title = { Text(stringResource(R.string.channel_rename_title)) },
             text = {
                 AppTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = "Nom",
+                    label = stringResource(R.string.common_name),
                     mode = KeyboardMode.TEXT
                 )
             },
@@ -275,10 +325,10 @@ fun CheckoutScreen(
                 TextButton(onClick = {
                     vm.renameChannel(channel.id, name.ifBlank { channel.name })
                     channelToRename = null
-                }) { Text("OK") }
+                }) { Text(stringResource(R.string.common_ok)) }
             },
             dismissButton = {
-                TextButton(onClick = { channelToRename = null }) { Text("Annuler") }
+                TextButton(onClick = { channelToRename = null }) { Text(stringResource(R.string.common_cancel)) }
             }
         )
     }
@@ -286,16 +336,39 @@ fun CheckoutScreen(
     channelToClose?.let { channel ->
         AlertDialog(
             onDismissRequest = { channelToClose = null },
-            title = { Text("Fermer ce canal ?") },
-            text = { Text("Le panier \"${channel.name}\" sera perdu.") },
+            title = { Text(stringResource(R.string.channel_close_title)) },
+            text = { Text(stringResource(R.string.channel_close_body, channel.name)) },
             confirmButton = {
                 TextButton(onClick = {
                     vm.closeChannel(channel.id)
                     channelToClose = null
-                }) { Text("Fermer") }
+                }) { Text(stringResource(R.string.common_close)) }
             },
             dismissButton = {
-                TextButton(onClick = { channelToClose = null }) { Text("Annuler") }
+                TextButton(onClick = { channelToClose = null }) { Text(stringResource(R.string.common_cancel)) }
+            }
+        )
+    }
+
+    lineToRemove?.let { line ->
+        AlertDialog(
+            onDismissRequest = { lineToRemove = null },
+            title = { Text(stringResource(R.string.checkout_remove_confirm_title)) },
+            text = { Text(stringResource(R.string.checkout_remove_confirm_body, line.categoryName)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.removeLine(line.productId)
+                    lineToRemove = null
+                }) {
+                    Text(
+                        stringResource(R.string.common_delete),
+                        color = Color(0xFFB91C1C),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { lineToRemove = null }) { Text(stringResource(R.string.common_cancel)) }
             }
         )
     }
@@ -308,44 +381,21 @@ fun CheckoutScreen(
     }
 
     if (showExportFormat) {
-        AlertDialog(
-            onDismissRequest = { showExportFormat = false },
-            title = { Text("Format d'export") },
-            text = { Text("Choisis le format du fichier à envoyer sur ton PC.") },
-            confirmButton = {},
-            dismissButton = {
-                Column {
-                    TextButton(onClick = {
-                        showExportFormat = false
-                        activeChannel?.let { vm.exportChannel(it.id, ExportFormat.CSV) }
-                    }) { Text("Excel (CSV)") }
-                    TextButton(onClick = {
-                        showExportFormat = false
-                        activeChannel?.let { vm.exportChannel(it.id, ExportFormat.JSON) }
-                    }) { Text("JSON") }
-                    TextButton(onClick = {
-                        showExportFormat = false
-                        activeChannel?.let { vm.exportChannel(it.id, ExportFormat.SAGE) }
-                    }) { Text("Sage 50") }
-                    TextButton(onClick = { showExportFormat = false }) { Text("Annuler") }
-                }
+        ExportFormatPickerDialog(
+            onDismiss = { showExportFormat = false },
+            onPick = { format ->
+                showExportFormat = false
+                activeChannel?.let { vm.exportChannel(it.id, format) }
             }
         )
     }
 
     if (showPrintConfirm) {
-        AlertDialog(
-            onDismissRequest = { showPrintConfirm = false },
-            title = { Text("Imprimer le ticket ?") },
-            text = { Text("Un ticket va être envoyé à l'imprimante. Confirmer ?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showPrintConfirm = false
-                    vm.printActive()
-                }) { Text("Imprimer") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPrintConfirm = false }) { Text("Annuler") }
+        PrintConfirmDialog(
+            onDismiss = { showPrintConfirm = false },
+            onConfirm = { lang ->
+                showPrintConfirm = false
+                vm.printActive(lang)
             }
         )
     }
@@ -399,7 +449,7 @@ private fun ChannelDropdown(
             ) {
                 if (channels.isEmpty()) {
                     androidx.compose.material3.DropdownMenuItem(
-                        text = { Text("Aucun canal — crée-en un →", color = Color.Gray) },
+                        text = { Text(stringResource(R.string.channel_none), color = Color.Gray) },
                         onClick = { expanded = false }
                     )
                 }
@@ -441,7 +491,7 @@ private fun ChannelDropdown(
                                 ) {
                                     Icon(
                                         Icons.Default.Close,
-                                        contentDescription = "Fermer",
+                                        contentDescription = stringResource(R.string.common_close),
                                         modifier = Modifier.size(16.dp)
                                     )
                                 }
@@ -469,7 +519,7 @@ private fun ChannelDropdown(
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(3.dp))
-                Text("Canal", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(stringResource(R.string.channel_new), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             }
         }
     }
@@ -495,10 +545,10 @@ private fun TotalBar(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-            TotalRow("Quantité totale", "x$totalQty", bold = false, big = false)
-            TotalRow("Total HT", formatEuro(totalHtCents), bold = false, big = false)
-            TotalRow("TVA (20%)", formatEuro(totalTvaCents), bold = false, big = false)
-            TotalRow("Total TTC", formatEuro(totalTtcCents), bold = true, big = true)
+            TotalRow(stringResource(R.string.checkout_total_quantity), "x$totalQty", bold = false, big = false)
+            TotalRow(stringResource(R.string.checkout_total_ht), formatEuro(totalHtCents), bold = false, big = false)
+            TotalRow(stringResource(R.string.checkout_total_vat), formatEuro(totalTvaCents), bold = false, big = false)
+            TotalRow(stringResource(R.string.checkout_total_ttc), formatEuro(totalTtcCents), bold = true, big = true)
             Spacer(Modifier.height(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -514,7 +564,7 @@ private fun TotalBar(
                 ) {
                     Icon(
                         Icons.Default.AttachMoney,
-                        contentDescription = "Encaissement",
+                        contentDescription = stringResource(R.string.checkout_action_cash),
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -535,7 +585,7 @@ private fun TotalBar(
                     } else {
                         Icon(
                             Icons.Default.Upload,
-                            contentDescription = "Exporter",
+                            contentDescription = stringResource(R.string.checkout_action_export),
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -556,7 +606,7 @@ private fun TotalBar(
                     } else {
                         Icon(
                             Icons.Default.Print,
-                            contentDescription = "Imprimer le ticket",
+                            contentDescription = stringResource(R.string.checkout_action_print),
                             modifier = Modifier.size(20.dp)
                         )
                     }

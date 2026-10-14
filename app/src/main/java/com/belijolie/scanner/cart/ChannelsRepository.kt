@@ -68,12 +68,17 @@ class ChannelsRepository(private val context: Context) {
         productId: Long,
         barcode: String,
         categoryName: String,
-        priceCents: Int
+        priceCents: Int,
+        categoryNameEn: String? = null,
+        nameEn: String? = null,
+        sageArticleCode: String? = null
     ) {
         val st = current()
         val activeId = st.activeChannelId ?: return
         val updated = st.channels.map { ch ->
-            if (ch.id == activeId) ch.addProduct(productId, barcode, categoryName, priceCents) else ch
+            if (ch.id == activeId)
+                ch.addProduct(productId, barcode, categoryName, priceCents, categoryNameEn, nameEn, sageArticleCode)
+            else ch
         }
         save(st.copy(channels = updated))
     }

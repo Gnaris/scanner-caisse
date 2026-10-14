@@ -32,30 +32,35 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.belijolie.scanner.R
 import com.belijolie.scanner.data.entity.Category
 import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
+import com.belijolie.scanner.util.CategoryTranslator
 
 /**
  * Modal pour ajouter manuellement une ligne au canal actif.
  *
- * Design simplifié : un SEUL champ pour la catégorie (saisie libre) + une
- * rangée de chips cliquables au-dessus pour sélectionner rapidement une
- * catégorie existante. Taper dedans crée une nouvelle catégorie à la volée
- * si elle n'existe pas (après validation côté caller).
+ * Un SEUL champ pour la catégorie + chips de catégories existantes au-dessus.
+ * Champ nom anglais optionnel pour l'impression ticket EN (auto-rempli depuis
+ * le dictionnaire interne tant que l'utilisateur n'a pas écrit sa propre valeur).
+ * Taper une catégorie absente la crée à la volée côté caller.
  */
 @Composable
 fun AddManualProductSheet(
     categories: List<Category>,
     onDismiss: () -> Unit,
-    onConfirm: (categoryName: String, priceCents: Int) -> Unit
+    onConfirm: (categoryName: String, priceCents: Int, nameEn: String?) -> Unit
 ) {
     var categoryText by remember { mutableStateOf("") }
+    var nameEn by remember { mutableStateOf("") }
+    var lastSuggestion by remember { mutableStateOf("") }
     var priceText by remember { mutableStateOf("") }
 
     Dialog(
@@ -79,20 +84,20 @@ fun AddManualProductSheet(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "Ajouter un produit",
+                        stringResource(R.string.manual_sheet_title),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Fermer")
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.common_close))
                     }
                 }
                 Spacer(Modifier.height(12.dp))
 
                 if (categories.isNotEmpty()) {
                     Text(
-                        "Catégories existantes",
+                        stringResource(R.string.manual_existing_categories),
                         fontSize = 11.sp,
                         color = Color.Gray
                     )
@@ -100,15 +105,40 @@ fun AddManualProductSheet(
                     CategoryChipsRow(
                         categories = categories,
                         selected = categoryText,
-                        onPick = { categoryText = it.name }
+                        onPick = { c ->
+                            categoryText = c.name
+                            // Si la catégorie choisie a déjà une traduction, on la propose
+                            // (toujours modifiable à la main).
+                            val suggestion = c.nameEn?.takeIf { it.isNotBlank() }
+                                ?: CategoryTranslator.suggestEnglishName(c.name).orEmpty()
+                            if (nameEn.isBlank() || nameEn == lastSuggestion) {
+                                nameEn = suggestion
+                                lastSuggestion = suggestion
+                            }
+                        }
                     )
                     Spacer(Modifier.height(12.dp))
                 }
 
                 AppTextField(
                     value = categoryText,
-                    onValueChange = { categoryText = it },
-                    label = "Catégorie (choisir ou taper)",
+                    onValueChange = { newVal ->
+                        categoryText = newVal
+                        val suggestion = CategoryTranslator.suggestEnglishName(newVal).orEmpty()
+                        if (nameEn.isBlank() || nameEn == lastSuggestion) {
+                            nameEn = suggestion
+                            lastSuggestion = suggestion
+                        }
+                    },
+                    label = stringResource(R.string.manual_category_label),
+                    mode = KeyboardMode.TEXT
+                )
+                Spacer(Modifier.height(12.dp))
+
+                AppTextField(
+                    value = nameEn,
+                    onValueChange = { nameEn = it },
+                    label = stringResource(R.string.manual_name_en_label),
                     mode = KeyboardMode.TEXT
                 )
                 Spacer(Modifier.height(12.dp))
@@ -116,7 +146,7 @@ fun AddManualProductSheet(
                 AppTextField(
                     value = priceText,
                     onValueChange = { priceText = it },
-                    label = "Prix (€)",
+                    label = stringResource(R.string.manual_price_label),
                     mode = KeyboardMode.DECIMAL
                 )
                 Spacer(Modifier.height(16.dp))
@@ -124,7 +154,11 @@ fun AddManualProductSheet(
                 Button(
                     onClick = {
                         val cents = parsePriceCentsManual(priceText) ?: return@Button
-                        onConfirm(categoryText.trim(), cents)
+                        onConfirm(
+                            categoryText.trim(),
+                            cents,
+                            nameEn.trim().takeIf { it.isNotEmpty() }
+                        )
                     },
                     enabled = categoryText.isNotBlank() && parsePriceCentsManual(priceText) != null,
                     shape = RoundedCornerShape(10.dp),
@@ -134,7 +168,7 @@ fun AddManualProductSheet(
                     Icon(Icons.Default.Add, contentDescription = null, tint = Color.White)
                     Spacer(Modifier.padding(start = 8.dp))
                     Text(
-                        "Ajouter au panier",
+                        stringResource(R.string.manual_add_to_cart),
                         color = Color.White,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold

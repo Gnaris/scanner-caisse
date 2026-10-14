@@ -26,11 +26,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.belijolie.scanner.R
 import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
 
@@ -68,19 +70,19 @@ fun CashPaymentSheet(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "Encaissement",
+                        stringResource(R.string.cash_title),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Fermer")
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.common_close))
                     }
                 }
                 Spacer(Modifier.height(12.dp))
 
                 AmountCard(
-                    label = "Total HT",
+                    label = stringResource(R.string.cash_total_ht),
                     value = formatEuro(totalHtCents),
                     valueColor = Color.Black
                 )
@@ -89,16 +91,19 @@ fun CashPaymentSheet(
                 AppTextField(
                     value = receivedText,
                     onValueChange = { receivedText = it },
-                    label = "Montant reçu (€)",
+                    label = stringResource(R.string.cash_amount_received),
                     mode = KeyboardMode.DECIMAL
                 )
                 Spacer(Modifier.height(12.dp))
 
+                val labelRemaining = stringResource(R.string.cash_remaining)
+                val labelChange = stringResource(R.string.cash_change)
+                val labelSettled = stringResource(R.string.cash_settled)
                 val (resteLabel, resteValue, resteColor) = when {
-                    receivedCents == null -> Triple("Reste à régler", formatEuro(totalHtCents), Color(0xFFB91C1C))
-                    diffCents > 0 -> Triple("À rendre", formatEuro(diffCents), Color(0xFF15803D))
-                    diffCents == 0 -> Triple("Soldé", formatEuro(0), Color(0xFF15803D))
-                    else -> Triple("Reste à régler", formatEuro(-diffCents), Color(0xFFB91C1C))
+                    receivedCents == null -> Triple(labelRemaining, formatEuro(totalHtCents), Color(0xFFB91C1C))
+                    diffCents > 0 -> Triple(labelChange, formatEuro(diffCents), Color(0xFF15803D))
+                    diffCents == 0 -> Triple(labelSettled, formatEuro(0), Color(0xFF15803D))
+                    else -> Triple(labelRemaining, formatEuro(-diffCents), Color(0xFFB91C1C))
                 }
                 AmountCard(
                     label = resteLabel,

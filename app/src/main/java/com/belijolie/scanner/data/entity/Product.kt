@@ -21,5 +21,9 @@ data class Product(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val barcode: String,
     val categoryId: Long,
-    val priceCents: Int
+    val priceCents: Int,
+    // Nom anglais optionnel pour les produits manuels. Pour les produits
+    // scannés, le nom affiché/imprimé reste celui de la catégorie
+    // (resp. categoryName / category.nameEn selon la langue du ticket).
+    val nameEn: String? = null
 )

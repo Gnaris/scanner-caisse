@@ -62,27 +62,80 @@ object EscPosPrinter {
 
     suspend fun printReceipt(
         settings: AppSettings,
-        lines: List<CartLine>
+        lines: List<CartLine>,
+        lang: TicketLang = TicketLang.FR
     ) = withContext(Dispatchers.IO) {
         val connection = TcpConnection(settings.printerIp, settings.printerPort, SOCKET_TIMEOUT_MS)
         val printer = EscPosPrinter(connection, DPI, PAPER_WIDTH_MM, CHARS_PER_LINE)
         try {
-            // Pre-render the double-QR section as a hex-encoded image so DantSu
-            // can inline it with the <img> tag.
-            val qrSectionHex = if (settings.microstoreQr.isNotBlank() || settings.websiteUrl.isNotBlank()) {
-                val bitmap = TicketImage.composeDoubleQrSection(
-                    microstoreQr = settings.microstoreQr,
-                    microstoreCode = settings.microstoreCode,
-                    websiteUrl = settings.websiteUrl
+            // Layout dynamique des QR codes selon ce qui est configuré :
+            // 0 → aucun bitmap ; 1 → single centré ; 2 → double côte à côte ;
+            // 3 → double (Microstore + Boutique) puis Avis Google en style
+            // "appel à l'action" en dessous.
+            val labels = TicketLabels.of(lang)
+            val microstore = settings.microstoreQr.takeIf { it.isNotBlank() }?.let {
+                TicketImage.QrEntry(
+                    title = labels.microstore,
+                    content = it,
+                    footer = settings.microstoreCode
                 )
-                PrinterTextParserImg.bitmapToHexadecimalString(printer, bitmap)
-            } else null
-            val reviewSectionHex = if (settings.googleReviewUrl.isNotBlank()) {
-                val bitmap = TicketImage.composeReviewQrSection(settings.googleReviewUrl)
-                PrinterTextParserImg.bitmapToHexadecimalString(printer, bitmap)
-            } else null
+            }
+            val boutique = settings.websiteUrl.takeIf { it.isNotBlank() }?.let {
+                TicketImage.QrEntry(
+                    title = labels.onlineShop,
+                    content = it,
+                    footer = TicketImage.truncateForWidth(it, 24)
+                )
+            }
+            val avis = settings.googleReviewUrl.takeIf { it.isNotBlank() }
 
-            printer.printFormattedText(buildReceipt(settings, lines, qrSectionHex, reviewSectionHex))
+            val qrBitmapsHex = mutableListOf<String>()
+            val entries = listOfNotNull(microstore, boutique)
+            when {
+                // Les 3 sont présents → double + section avis dédiée (style gros)
+                entries.size == 2 && avis != null -> {
+                    qrBitmapsHex += PrinterTextParserImg.bitmapToHexadecimalString(
+                        printer,
+                        TicketImage.composeDoubleQrSection(entries[0], entries[1])
+                    )
+                    qrBitmapsHex += PrinterTextParserImg.bitmapToHexadecimalString(
+                        printer,
+                        TicketImage.composeReviewQrSection(avis, lang)
+                    )
+                }
+                // 2 QR dont un est Avis → double avec style petit uniforme
+                entries.size == 1 && avis != null -> {
+                    val avisEntry = TicketImage.QrEntry(labels.googleReview, avis)
+                    qrBitmapsHex += PrinterTextParserImg.bitmapToHexadecimalString(
+                        printer,
+                        TicketImage.composeDoubleQrSection(entries[0], avisEntry)
+                    )
+                }
+                // 2 QR sans Avis → double standard
+                entries.size == 2 -> {
+                    qrBitmapsHex += PrinterTextParserImg.bitmapToHexadecimalString(
+                        printer,
+                        TicketImage.composeDoubleQrSection(entries[0], entries[1])
+                    )
+                }
+                // 1 QR seul parmi Microstore / Boutique → centré style petit
+                entries.size == 1 -> {
+                    qrBitmapsHex += PrinterTextParserImg.bitmapToHexadecimalString(
+                        printer,
+                        TicketImage.composeSingleQrSection(entries[0])
+                    )
+                }
+                // 1 QR = Avis Google seul → section d'appel à l'action centrée
+                entries.isEmpty() && avis != null -> {
+                    qrBitmapsHex += PrinterTextParserImg.bitmapToHexadecimalString(
+                        printer,
+                        TicketImage.composeReviewQrSection(avis, lang)
+                    )
+                }
+                // 0 QR → rien
+            }
+
+            printer.printFormattedText(buildReceipt(settings, lines, lang, qrBitmapsHex))
             val cmds = printer.commands()
             cmds.feedPaper(500)
             cmds.cutPaper()
@@ -110,10 +163,13 @@ object EscPosPrinter {
     private fun buildReceipt(
         settings: AppSettings,
         lines: List<CartLine>,
-        qrSectionHex: String? = null,
-        reviewSectionHex: String? = null
+        lang: TicketLang,
+        qrBitmapsHex: List<String> = emptyList()
     ): String = buildString {
-        val now = SimpleDateFormat("dd/MM/yyyy  HH:mm", Locale.FRANCE).format(Date())
+        val labels = TicketLabels.of(lang)
+        val dateLocale = if (lang == TicketLang.EN) Locale.ENGLISH else Locale.FRANCE
+        val datePattern = if (lang == TicketLang.EN) "MM/dd/yyyy  HH:mm" else "dd/MM/yyyy  HH:mm"
+        val now = SimpleDateFormat(datePattern, dateLocale).format(Date())
 
         // ---------- Header ----------
         append("[C]<b><font size='big'>").append(escape(settings.shopName)).append("</font></b>\n\n")
@@ -138,7 +194,7 @@ object EscPosPrinter {
         append("[L]").append(DIVIDER).append('\n')
 
         // ---------- Table header ----------
-        append("[L]").append(tableRow("Catégorie", "Qt", "P.U.", "HT")).append('\n')
+        append("[L]").append(tableRow(labels.headerCategory, labels.headerQty, labels.headerUnit, labels.headerNet)).append('\n')
         append("[L]").append(DIVIDER).append('\n')
 
         // ---------- Product rows ----------
@@ -164,7 +220,13 @@ object EscPosPrinter {
 
             val bold = categoryIndex % 2 == 1
 
-            val catChunks = line.categoryName.chunked(COL_CAT).ifEmpty { listOf("") }
+            val displayName = resolveLineDisplayName(
+                categoryName = line.categoryName,
+                categoryNameEn = line.categoryNameEn,
+                nameEn = line.nameEn,
+                lang = lang
+            )
+            val catChunks = displayName.chunked(COL_CAT).ifEmpty { listOf("") }
             catChunks.forEachIndexed { idx, chunk ->
                 val row = if (idx == 0) {
                     tableRow(
@@ -188,29 +250,22 @@ object EscPosPrinter {
         val totalTva = totalTtcCents - totalHtCents
         val totalHt = totalHtCents
 
-        append("[L]").append(PAD).append("Quantité totale[R]")
+        append("[L]").append(PAD).append(labels.totalQuantity).append("[R]")
             .append("x").append(totalQty.toString()).append(PAD).append('\n')
-        append("[L]").append(PAD).append("Total HT[R]")
+        append("[L]").append(PAD).append(labels.totalNet).append("[R]")
             .append(formatPrice(totalHt)).append(" €").append(PAD).append('\n')
-        append("[L]").append(PAD).append("TVA totale (20%)[R]")
+        append("[L]").append(PAD).append(labels.totalVat).append("[R]")
             .append(formatPrice(totalTva)).append(" €").append(PAD).append('\n')
-        append("[L]").append(PAD).append("<b>Total TTC[R]")
+        append("[L]").append(PAD).append("<b>").append(labels.totalGross).append("[R]")
             .append(formatPrice(totalTtcCents)).append(" €</b>").append(PAD).append('\n')
 
-        // ---------- Microstore + Boutique en ligne (QR codes side by side) ----------
-        if (qrSectionHex != null) {
+        // ---------- Sections QR (dynamiques : 0, 1 ou 2 bitmaps) ----------
+        // [C]<img> : l'imprimante centre l'image sur la zone imprimable.
+        // Chaque bitmap TicketImage fait exactement 576 px (largeur imprimable
+        // du MUNBYN) → les QR tombent pile centrés sur le papier.
+        qrBitmapsHex.forEach { hex ->
             append("[L]").append(DIVIDER).append('\n')
-            // [C] = l'imprimante centre l'image sur la zone imprimable. Combiné
-            // avec un bitmap qui fait exactement la largeur imprimable (576 px
-            // dans TicketImage), les deux QR tombent pile sur les quarts du
-            // papier → centrage symétrique garanti.
-            append("[C]<img>").append(qrSectionHex).append("</img>\n")
-        }
-
-        // ---------- Avis Google (bloc d'appel à l'action centré) ----------
-        if (reviewSectionHex != null) {
-            append("[L]").append(DIVIDER).append('\n')
-            append("[C]<img>").append(reviewSectionHex).append("</img>\n")
+            append("[C]<img>").append(hex).append("</img>\n")
         }
 
         // Minimal padding — the explicit feedPaper(500) handles the cut cushion.

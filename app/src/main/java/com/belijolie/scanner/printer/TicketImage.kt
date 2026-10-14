@@ -10,19 +10,22 @@ import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 
 /**
- * Builds the composite bitmap for the "QR codes side-by-side" section at the
- * bottom of the receipt: left = Microstore (title + QR + access code),
- * right = Boutique en ligne (title + QR + URL).
+ * Rendu des sections QR en bas de ticket.
  *
- * The resulting bitmap is black & white, sized for the printer's dot width.
+ * Trois sources possibles (toutes optionnelles) : Microstore, Boutique en
+ * ligne, Avis Google. Le layout s'adapte au nombre configuré :
+ *   - 0 QR → rien
+ *   - 1 QR → centré sur le papier
+ *   - 2 QR → côte à côte
+ *   - 3 QR → Microstore + Boutique côte à côte, puis Avis Google en bas
+ *     (centré, format "appel à l'action" avec titre + subtitle)
  */
 object TicketImage {
 
     /**
      * Largeur du bitmap = largeur imprimable du MUNBYN ITPP047 : 72 mm × 8 dots/mm
      * = 576 dots. En conjonction avec `[C]<img>` dans EscPosPrinter, l'image est
-     * centrée pile sur la bande imprimée. Chaque QR est placé à WIDTH_PX/4 et
-     * WIDTH_PX*3/4 — centrés dans leur demi-bande, donc symétriques sur le papier.
+     * centrée pile sur la bande imprimée.
      */
     private const val WIDTH_PX = 576
 
@@ -31,16 +34,91 @@ object TicketImage {
     private const val TITLE_HEIGHT = 32
     private const val FOOTER_HEIGHT = 42
 
+    /** Une entrée QR : titre affiché au-dessus, contenu encodé, footer court. */
+    data class QrEntry(
+        val title: String,
+        val content: String,
+        val footer: String = ""
+    )
+
     /**
-     * Section "Avis Google" imprimée en bas de ticket : titre d'invitation
-     * centré + QR centré + sous-titre. L'URL (ex. g.page/r/XXX/review) ouvre
-     * directement la page d'avis Google au scan.
+     * Compose une section QR unique centrée sur toute la largeur du papier.
+     * Même style visuel que les colonnes du double QR, mais seul au milieu.
      */
-    fun composeReviewQrSection(url: String): Bitmap {
+    fun composeSingleQrSection(entry: QrEntry): Bitmap {
+        val height = TITLE_HEIGHT + PADDING + QR_PX + PADDING + FOOTER_HEIGHT + PADDING
+
+        val bitmap = Bitmap.createBitmap(WIDTH_PX, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(Color.WHITE)
+
+        val titlePaint = titlePaint()
+        val footerPaint = footerPaint()
+
+        drawColumn(
+            canvas = canvas,
+            centerX = WIDTH_PX / 2,
+            qr = generateQrBitmap(entry.content, QR_PX),
+            title = entry.title,
+            footer = entry.footer,
+            titlePaint = titlePaint,
+            footerPaint = footerPaint
+        )
+
+        return bitmap
+    }
+
+    /**
+     * Compose une section avec deux QR codes côte à côte (gauche + droite).
+     * Chaque QR est centré dans sa demi-bande du papier.
+     */
+    fun composeDoubleQrSection(left: QrEntry, right: QrEntry): Bitmap {
+        val height = TITLE_HEIGHT + PADDING + QR_PX + PADDING + FOOTER_HEIGHT + PADDING
+
+        val bitmap = Bitmap.createBitmap(WIDTH_PX, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(Color.WHITE)
+
+        val titlePaint = titlePaint()
+        val footerPaint = footerPaint()
+
+        drawColumn(
+            canvas = canvas,
+            centerX = WIDTH_PX / 4,
+            qr = generateQrBitmap(left.content, QR_PX),
+            title = left.title,
+            footer = left.footer,
+            titlePaint = titlePaint,
+            footerPaint = footerPaint
+        )
+        drawColumn(
+            canvas = canvas,
+            centerX = WIDTH_PX * 3 / 4,
+            qr = generateQrBitmap(right.content, QR_PX),
+            title = right.title,
+            footer = right.footer,
+            titlePaint = titlePaint,
+            footerPaint = footerPaint
+        )
+
+        return bitmap
+    }
+
+    /**
+     * Section "Avis Google" en style "appel à l'action" :
+     * titre très gros, QR plus grand, subtitle en-dessous.
+     * Utilisée uniquement quand les 3 QR sont configurés (Avis Google tout
+     * seul en bas, après le double Microstore + Boutique).
+     */
+    fun composeReviewQrSection(url: String, lang: TicketLang = TicketLang.FR): Bitmap {
+        val labels = TicketLabels.of(lang)
         val qrSize = 220
         val titleHeight = 44
         val subtitleHeight = 42
-        val height = titleHeight + PADDING + qrSize + PADDING + subtitleHeight + PADDING
+        // +10px de marge en bas pour éviter que le subtitle en gras touche
+        // le bord inférieur et soit visuellement coupé.
+        val bottomMargin = 10
+        val height = titleHeight + PADDING + qrSize + PADDING + subtitleHeight + PADDING + bottomMargin
 
         val bitmap = Bitmap.createBitmap(WIDTH_PX, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -62,7 +140,7 @@ object TicketImage {
         }
 
         val centerX = WIDTH_PX / 2
-        canvas.drawText("LAISSEZ UN AVIS !", centerX.toFloat(), (titleHeight - 10).toFloat(), titlePaint)
+        canvas.drawText(labels.reviewTitle, centerX.toFloat(), (titleHeight - 10).toFloat(), titlePaint)
 
         val qr = generateQrBitmap(url, qrSize)
         val qrLeft = centerX - qrSize / 2
@@ -70,7 +148,7 @@ object TicketImage {
         canvas.drawBitmap(qr, qrLeft.toFloat(), qrTop.toFloat(), null)
 
         canvas.drawText(
-            "Scannez pour nous noter sur Google",
+            labels.reviewSubtitle,
             centerX.toFloat(),
             (qrTop + qrSize + PADDING + subtitleHeight - 10).toFloat(),
             subtitlePaint
@@ -79,58 +157,20 @@ object TicketImage {
         return bitmap
     }
 
-    fun composeDoubleQrSection(
-        microstoreQr: String,
-        microstoreCode: String,
-        websiteUrl: String
-    ): Bitmap {
-        val leftQr = if (microstoreQr.isNotBlank()) generateQrBitmap(microstoreQr, QR_PX) else null
-        val rightQr = if (websiteUrl.isNotBlank()) generateQrBitmap(websiteUrl, QR_PX) else null
+    private fun titlePaint() = Paint().apply {
+        color = Color.BLACK
+        isAntiAlias = false
+        textAlign = Paint.Align.CENTER
+        textSize = 24f
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
 
-        val height = TITLE_HEIGHT + PADDING + QR_PX + PADDING + FOOTER_HEIGHT + PADDING
-
-        val bitmap = Bitmap.createBitmap(WIDTH_PX, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        canvas.drawColor(Color.WHITE)
-
-        val titlePaint = Paint().apply {
-            color = Color.BLACK
-            isAntiAlias = false
-            textAlign = Paint.Align.CENTER
-            textSize = 24f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-        val footerPaint = Paint().apply {
-            color = Color.BLACK
-            isAntiAlias = false
-            textAlign = Paint.Align.CENTER
-            textSize = 26f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-
-        val leftCenterX = WIDTH_PX / 4
-        val rightCenterX = WIDTH_PX * 3 / 4
-
-        drawColumn(
-            canvas = canvas,
-            centerX = leftCenterX,
-            qr = leftQr,
-            title = "MICROSTORE",
-            footer = microstoreCode.ifBlank { "" },
-            titlePaint = titlePaint,
-            footerPaint = footerPaint
-        )
-        drawColumn(
-            canvas = canvas,
-            centerX = rightCenterX,
-            qr = rightQr,
-            title = "BOUTIQUE EN LIGNE",
-            footer = truncateForWidth(websiteUrl, maxChars = 24),
-            titlePaint = titlePaint,
-            footerPaint = footerPaint
-        )
-
-        return bitmap
+    private fun footerPaint() = Paint().apply {
+        color = Color.BLACK
+        isAntiAlias = false
+        textAlign = Paint.Align.CENTER
+        textSize = 26f
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
 
     private fun drawColumn(
@@ -168,6 +208,6 @@ object TicketImage {
         return bitmap
     }
 
-    private fun truncateForWidth(text: String, maxChars: Int): String =
+    internal fun truncateForWidth(text: String, maxChars: Int): String =
         if (text.length <= maxChars) text else text.take(maxChars - 1) + "…"
 }

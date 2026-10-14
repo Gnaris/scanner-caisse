@@ -40,11 +40,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.belijolie.scanner.R
 import com.belijolie.scanner.data.entity.Category
 import com.belijolie.scanner.data.entity.ProductWithCategory
 import com.belijolie.scanner.scanner.ScanEventBus
@@ -65,16 +67,19 @@ fun ProductsScreen(
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = { showAdd = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Ajouter")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.common_add))
             }
         }
     ) { padding ->
         if (products.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 Text(
-                    "Aucun produit. Appuie sur + pour en créer.",
-                    modifier = Modifier.align(Alignment.Center),
-                    color = Color.Gray
+                    stringResource(R.string.product_empty),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(horizontal = 32.dp),
+                    color = Color.Gray,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
             }
         } else {
@@ -101,9 +106,9 @@ fun ProductsScreen(
     error?.let { msg ->
         AlertDialog(
             onDismissRequest = vm::dismissError,
-            title = { Text("Erreur") },
+            title = { Text(stringResource(R.string.common_error)) },
             text = { Text(msg) },
-            confirmButton = { TextButton(onClick = vm::dismissError) { Text("OK") } }
+            confirmButton = { TextButton(onClick = vm::dismissError) { Text(stringResource(R.string.common_ok)) } }
         )
     }
 }
@@ -120,7 +125,7 @@ private fun ProductRow(p: ProductWithCategory, onDelete: () -> Unit) {
         }
         Text(formatEuro(p.product.priceCents), fontWeight = FontWeight.Bold)
         IconButton(onClick = onDelete) {
-            Icon(Icons.Default.Delete, contentDescription = "Supprimer")
+            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.common_delete))
         }
     }
     HorizontalDivider()
@@ -148,7 +153,7 @@ private fun AddProductDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nouveau produit") },
+        title = { Text(stringResource(R.string.manual_sheet_title)) },
         text = {
             Column {
                 AppTextField(
@@ -159,7 +164,7 @@ private fun AddProductDialog(
                             priceText = "%d.%02d".format(cents / 100, cents % 100)
                         }
                     },
-                    label = "Code-barres (ou scan)",
+                    label = stringResource(R.string.product_barcode),
                     mode = KeyboardMode.NUMBER
                 )
                 Spacer(Modifier.height(12.dp))
@@ -174,7 +179,7 @@ private fun AddProductDialog(
                 AppTextField(
                     value = priceText,
                     onValueChange = { priceText = it },
-                    label = "Prix (€)",
+                    label = stringResource(R.string.product_price),
                     mode = KeyboardMode.DECIMAL
                 )
             }
@@ -186,9 +191,9 @@ private fun AddProductDialog(
                     val cents = parseCents(priceText) ?: return@TextButton
                     onConfirm(barcode.trim(), categoryId, cents)
                 }
-            ) { Text("Ajouter") }
+            ) { Text(stringResource(R.string.common_add)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } }
     )
 }
 
@@ -200,16 +205,16 @@ private fun CategorySelector(
 ) {
     if (categories.isEmpty()) {
         Text(
-            "Crée d'abord une catégorie dans l'onglet « Catégories ».",
+            stringResource(R.string.product_no_category_hint),
             color = Color.Red
         )
         return
     }
     var expanded by remember { mutableStateOf(false) }
-    val selected = categories.firstOrNull { it.id == selectedId }?.name ?: "— Choisir —"
+    val selected = categories.firstOrNull { it.id == selectedId }?.name ?: "—"
 
     Column {
-        Text("Catégorie", fontSize = 12.sp, color = Color.Gray)
+        Text(stringResource(R.string.checkout_header_category), fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(4.dp))
         Box(
             modifier = Modifier

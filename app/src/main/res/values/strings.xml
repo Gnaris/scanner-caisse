@@ -1,38 +1,167 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Scanner Caisse</string>
+    <string name="app_name">Scanner Caisse / 收银扫码器</string>
 
-    <!-- Navigation -->
-    <string name="nav_checkout">Caisse</string>
-    <string name="nav_products">Produits</string>
-    <string name="nav_categories">Catégories</string>
-    <string name="nav_settings">Paramètres</string>
+    <!-- Boutons communs -->
+    <string name="common_ok">OK / 确定</string>
+    <string name="common_cancel">Annuler / 取消</string>
+    <string name="common_add">Ajouter / 添加</string>
+    <string name="common_save">Enregistrer\n保存</string>
+    <string name="common_edit">Modifier / 编辑</string>
+    <string name="common_delete">Supprimer / 删除</string>
+    <string name="common_close">Fermer / 关闭</string>
+    <string name="common_error">Erreur / 错误</string>
+    <string name="common_print">Imprimer / 打印</string>
+    <string name="common_name">Nom / 名称</string>
+
+    <!-- Navigation (sur 2 lignes pour tenir dans la bottom bar) -->
+    <string name="nav_checkout">Caisse\n收银</string>
+    <string name="nav_products">Produits\n商品</string>
+    <string name="nav_categories">Catégories\n类别</string>
+    <string name="nav_settings">Paramètres\n设置</string>
 
     <!-- Checkout -->
-    <string name="checkout_new_channel">Nouveau canal</string>
-    <string name="checkout_rename_channel">Renommer</string>
-    <string name="checkout_close_channel">Fermer</string>
-    <string name="checkout_print_ticket">Imprimer le ticket</string>
-    <string name="checkout_total">TOTAL</string>
-    <string name="checkout_empty">Scanne un produit avec le bouton latéral.</string>
-    <string name="checkout_unknown_product">Produit inconnu — créer ?</string>
+    <string name="checkout_add_product">Ajouter un produit / 添加商品</string>
+    <!-- Headers de colonnes : empilés sur 2 lignes pour tenir dans la largeur -->
+    <string name="checkout_header_category">Catégorie\n类别</string>
+    <string name="checkout_header_qty">Qté\n数量</string>
+    <string name="checkout_header_total_ht">Total HT\n税前</string>
+    <string name="checkout_empty_hint">Scanne un produit avec le bouton latéral.\n使用侧键扫描商品。</string>
+    <string name="checkout_remove_line">Retirer / 移除</string>
+    <string name="checkout_remove_confirm_title">Retirer cet article ? / 移除此商品？</string>
+    <string name="checkout_remove_confirm_body">La ligne \"%1$s\" sera retirée du panier. / 商品 \"%1$s\" 将从购物车中移除。</string>
+    <string name="checkout_cart_empty">Panier vide / 购物车为空</string>
+    <string name="checkout_ticket_printed">Ticket imprimé / 小票已打印</string>
+    <string name="checkout_export_sent">Export envoyé / 导出已发送 : %1$s</string>
+    <string name="checkout_total_quantity">Quantité totale / 商品总数</string>
+    <string name="checkout_total_ht">Total HT / 税前总计</string>
+    <string name="checkout_total_vat">TVA / 增值税 (20%%)</string>
+    <string name="checkout_total_ttc">Total TTC / 税后总计</string>
+    <string name="checkout_action_cash">Encaissement / 收款</string>
+    <string name="checkout_action_export">Exporter / 导出</string>
+    <string name="checkout_action_print">Imprimer le ticket / 打印小票</string>
 
-    <!-- Products -->
-    <string name="product_barcode">Code-barres</string>
-    <string name="product_category">Catégorie</string>
-    <string name="product_price">Prix (€)</string>
-    <string name="product_add">Ajouter le produit</string>
+    <!-- Canaux (paniers parallèles) -->
+    <string name="channel_new">Canal / 购物车</string>
+    <string name="channel_none">Aucun canal — crée-en un → / 没有购物车——请新建 →</string>
+    <string name="channel_rename_title">Renommer le canal / 重命名购物车</string>
+    <string name="channel_close_title">Fermer ce canal ? / 关闭此购物车？</string>
+    <string name="channel_close_body">Le panier \"%1$s\" sera perdu. / 购物车 \"%1$s\" 将被删除。</string>
 
-    <!-- Categories -->
-    <string name="category_name">Nom de la catégorie</string>
-    <string name="category_add">Ajouter la catégorie</string>
+    <!-- Produit manuel (modal) -->
+    <string name="manual_sheet_title">Ajouter un produit / 添加商品</string>
+    <string name="manual_existing_categories">Catégories existantes / 已有类别</string>
+    <string name="manual_category_label">Catégorie (choisir ou taper) / 类别(选择或输入)</string>
+    <string name="manual_name_en_label">Nom anglais (optionnel, pour ticket EN) / 英文名称(可选)</string>
+    <string name="manual_price_label">Prix / 价格 (€)</string>
+    <string name="manual_add_to_cart">Ajouter au panier / 加入购物车</string>
 
-    <!-- Settings -->
-    <string name="settings_shop_name">Nom du commerce</string>
-    <string name="settings_printer_ip">IP de l\'imprimante</string>
-    <string name="settings_printer_port">Port</string>
-    <string name="settings_scanner_action">Action broadcast du scanner</string>
-    <string name="settings_scanner_extra">Nom de l\'extra (donnée scannée)</string>
-    <string name="settings_save">Enregistrer</string>
-    <string name="settings_test_print">Test imprimante</string>
+    <!-- Produit inconnu (modal) -->
+    <string name="unknown_title">Produit inconnu / 未知商品</string>
+    <string name="unknown_create_title">Produit inconnu — à créer / 未知商品 — 需要创建</string>
+    <string name="unknown_pick_title">Choisir un produit existant / 选择一个已有商品</string>
+    <string name="unknown_back_to_create">Retour à la création / 返回创建</string>
+    <string name="unknown_or_pick_from_list">Ou choisir dans la liste → / 或从列表中选择 →</string>
+    <string name="unknown_create_cta">Créer et ajouter au panier / 创建并加入购物车</string>
+    <string name="unknown_create_short">Créer / 创建</string>
+    <string name="unknown_price_auto">Prix auto-décodé / 价格自动识别 (€)</string>
+    <string name="unknown_no_products">Aucun produit dans la base pour l\'instant. / 数据库中暂无商品。</string>
+    <string name="unknown_category_dropdown_empty">— Aucune catégorie / 没有类别 —</string>
+    <string name="unknown_category_dropdown_pick">— Choisir / 选择 —</string>
+    <string name="unknown_new_category">Nouvelle catégorie / 新建类别</string>
+    <string name="unknown_category_name_label">Nom de la catégorie / 类别名称</string>
+
+    <!-- Catégories -->
+    <string name="category_empty">Aucune catégorie. Appuie sur + pour en créer.\n还没有类别,点击 + 新建。</string>
+    <string name="category_add_title">Nouvelle catégorie / 新建类别</string>
+    <string name="category_edit_title">Modifier la catégorie / 编辑类别</string>
+    <string name="category_name_fr">Nom (FR) / 名称(法)</string>
+    <string name="category_name_en">Nom (EN) — pour impression ticket anglais / 英文名称——用于英文小票</string>
+    <string name="category_sage_code">Code article Sage 50 (optionnel) / Sage 50 商品代码(可选)</string>
+    <string name="category_sage_hint">Le code article Sage n\'est requis que si tu exportes vers Sage 50. / 仅在导出到 Sage 50 时需要此代码。</string>
+
+    <!-- Produits -->
+    <string name="product_empty">Aucun produit. Appuie sur + pour en créer.\n还没有商品,点击 + 新建。</string>
+    <string name="product_barcode">Code-barres / 条形码</string>
+    <string name="product_price">Prix / 价格 (€)</string>
+    <string name="product_no_category_hint">Crée d\'abord une catégorie dans l\'onglet « Catégories ». / 请先在"类别"标签中创建一个类别。</string>
+
+    <!-- Encaissement (caisse espèces) -->
+    <string name="cash_title">Encaissement / 收款</string>
+    <string name="cash_total_ht">Total HT / 税前总计</string>
+    <string name="cash_amount_received">Montant reçu / 收到金额 (€)</string>
+    <string name="cash_remaining">Reste à régler / 待付金额</string>
+    <string name="cash_change">À rendre / 找零</string>
+    <string name="cash_settled">Soldé / 已付清</string>
+
+    <!-- Menu export -->
+    <string name="export_title">Format d\'export / 导出格式</string>
+    <string name="export_subtitle">Choisis le fichier à envoyer sur ton PC / 选择要发送到电脑的文件</string>
+    <string name="export_excel">Excel</string>
+    <string name="export_excel_sub">CSV</string>
+    <string name="export_json">JSON</string>
+    <string name="export_json_sub">Brut / 原始</string>
+    <string name="export_sage">Sage 50</string>
+    <string name="export_sage_sub">Facture / 发票</string>
+    <string name="export_error_title">Export impossible / 无法导出</string>
+
+    <!-- Dialog impression -->
+    <string name="print_confirm_title">Imprimer le ticket ? / 打印小票？</string>
+    <string name="print_confirm_body">Un ticket va être envoyé à l\'imprimante. / 小票将发送到打印机。</string>
+    <string name="print_lang_label">Langue du ticket / 小票语言</string>
+    <string name="print_lang_fr">Français</string>
+    <string name="print_lang_en">English</string>
+
+    <!-- Aperçu ticket -->
+    <string name="preview_title">Aperçu du ticket / 小票预览</string>
+    <string name="preview_subtitle">Simulation avec des produits d\'exemple. Léger écart possible avec le papier. / 使用示例商品进行模拟,打印结果可能略有差异。</string>
+
+    <!-- Paramètres -->
+    <string name="settings_section_shop">Commerce / 店铺</string>
+    <string name="settings_section_address">Adresse / 地址</string>
+    <string name="settings_section_qr">QR codes du ticket / 小票二维码</string>
+    <string name="settings_section_printer">Imprimante / 打印机</string>
+    <string name="settings_section_scanner">Scanner / 扫码器</string>
+    <string name="settings_section_export">Export PC / 电脑导出</string>
+    <string name="settings_section_sage">Sage 50</string>
+    <string name="settings_shop_name">Nom du commerce / 店铺名称</string>
+    <string name="settings_address">Adresse / 地址</string>
+    <string name="settings_address_complement">Complément d\'adresse / 地址补充</string>
+    <!-- Code postal / Ville sont côte à côte dans un Row : empiler les 2 langues -->
+    <string name="settings_postal_code">Code postal\n邮编</string>
+    <string name="settings_city">Ville\n城市</string>
+    <string name="settings_country">Pays / 国家</string>
+    <string name="settings_microstore_qr">URL / QR Microstore / 微店</string>
+    <string name="settings_microstore_code">Code Microstore / 微店代码</string>
+    <string name="settings_website_url">URL du site / 网站地址</string>
+    <string name="settings_google_review_url">URL Avis Google / Google 评价地址</string>
+    <string name="settings_printer_ip">IP de l\'imprimante / 打印机 IP</string>
+    <string name="settings_printer_port">Port / 端口</string>
+    <string name="settings_scanner_action">Action broadcast du scanner / 扫码器广播动作</string>
+    <string name="settings_scanner_extra">Nom de l\'extra (donnée scannée) / 扫码器数据字段</string>
+    <string name="settings_export_url">URL export PC / 电脑导出地址</string>
+    <string name="settings_sage_manual_code">Code article Sage (produits manuels) / Sage 商品代码(手动)</string>
+    <string name="settings_test_print">Test imprimante\n测试打印机</string>
+    <string name="settings_preview_ticket">Aperçu du ticket / 小票预览</string>
+
+    <!-- Statut imprimante / export -->
+    <string name="status_wifi_not_connected">📶 Wi-Fi non connecté / Wi-Fi 未连接</string>
+
+    <!-- Mises à jour auto -->
+    <string name="update_section_title">Mises à jour / 更新</string>
+    <string name="update_current_version">Version actuelle / 当前版本 : %1$s</string>
+    <string name="update_check_button">Vérifier les mises à jour\n检查更新</string>
+    <string name="update_checking">Vérification en cours… / 检查中…</string>
+    <string name="update_up_to_date">L\'app est à jour / 应用已是最新版本</string>
+    <string name="update_available_title">Mise à jour disponible / 发现新版本</string>
+    <string name="update_available_body">Version %1$s → %2$s / 版本 %1$s → %2$s</string>
+    <string name="update_release_notes_title">Notes de version / 版本说明</string>
+    <string name="update_install_button">Installer / 安装</string>
+    <string name="update_later_button">Plus tard / 稍后</string>
+    <string name="update_downloading">Téléchargement… / 下载中…</string>
+    <string name="update_ready_title">Prêt à installer / 准备安装</string>
+    <string name="update_ready_body">Version %1$s téléchargée. Lance l\'installation ? / 版本 %1$s 下载完成,启动安装?</string>
+    <string name="update_ready_install">Lancer l\'installation / 启动安装</string>
+    <string name="update_error_title">Mise à jour impossible / 更新失败</string>
+    <string name="update_error_retry">Réessayer / 重试</string>
 </resources>

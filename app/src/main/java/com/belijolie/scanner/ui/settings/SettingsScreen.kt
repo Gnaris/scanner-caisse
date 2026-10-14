@@ -23,14 +23,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.belijolie.scanner.R
+import com.belijolie.scanner.ScannerApp
 import com.belijolie.scanner.data.AppSettings
 import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
+import com.belijolie.scanner.update.UpdateState
 
 @Composable
 fun SettingsScreen(
@@ -52,8 +56,9 @@ fun SettingsScreen(
     var googleReviewUrl by remember(saved.googleReviewUrl) { mutableStateOf(saved.googleReviewUrl) }
     var ip by remember(saved.printerIp) { mutableStateOf(saved.printerIp) }
     var portText by remember(saved.printerPort) { mutableStateOf(saved.printerPort.toString()) }
-    var action by remember(saved.scannerAction) { mutableStateOf(saved.scannerAction) }
-    var extra by remember(saved.scannerExtra) { mutableStateOf(saved.scannerExtra) }
+    // Scanner config masquée côté UI (reste persistée côté DataStore pour que
+    // le PDA continue d'écouter la bonne action broadcast — valeurs par défaut
+    // suffisantes pour tous les clients).
     var exportUrl by remember(saved.exportUrl) { mutableStateOf(saved.exportUrl) }
     var sageManualArt by remember(saved.sageManualArticleCode) { mutableStateOf(saved.sageManualArticleCode) }
 
@@ -69,26 +74,26 @@ fun SettingsScreen(
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)
     ) {
-        Text("Commerce", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        SectionHeader(stringResource(R.string.settings_section_shop))
         Spacer(Modifier.height(8.dp))
         AppTextField(
             value = shopName,
             onValueChange = { shopName = it },
-            label = "Nom du commerce",
+            label = stringResource(R.string.settings_shop_name),
             mode = KeyboardMode.TEXT
         )
         Spacer(Modifier.height(8.dp))
         AppTextField(
             value = address,
             onValueChange = { address = it },
-            label = "Adresse",
+            label = stringResource(R.string.settings_address),
             mode = KeyboardMode.TEXT
         )
         Spacer(Modifier.height(8.dp))
         AppTextField(
             value = addressComplement,
             onValueChange = { addressComplement = it },
-            label = "Adresse complémentaire (optionnel)",
+            label = stringResource(R.string.settings_address_complement),
             mode = KeyboardMode.TEXT
         )
         Spacer(Modifier.height(8.dp))
@@ -96,14 +101,14 @@ fun SettingsScreen(
             AppTextField(
                 value = postalCode,
                 onValueChange = { postalCode = it },
-                label = "Code postal",
+                label = stringResource(R.string.settings_postal_code),
                 mode = KeyboardMode.NUMBER,
                 modifier = Modifier.weight(1f)
             )
             AppTextField(
                 value = city,
                 onValueChange = { city = it },
-                label = "Ville",
+                label = stringResource(R.string.settings_city),
                 mode = KeyboardMode.TEXT,
                 modifier = Modifier.weight(2f)
             )
@@ -112,120 +117,88 @@ fun SettingsScreen(
         AppTextField(
             value = country,
             onValueChange = { country = it },
-            label = "Pays",
+            label = stringResource(R.string.settings_country),
             mode = KeyboardMode.TEXT
         )
 
         Spacer(Modifier.height(24.dp))
-        Text("Microstore & site web", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Le QR code Microstore + le code d'accès + l'URL du site s'affichent en bas de chaque ticket.",
-            fontSize = 12.sp
-        )
+        SectionHeader(stringResource(R.string.settings_section_qr))
         Spacer(Modifier.height(8.dp))
         AppTextField(
             value = microstoreQr,
             onValueChange = { microstoreQr = it },
-            label = "Contenu du QR Microstore (URL ou texte)",
+            label = stringResource(R.string.settings_microstore_qr),
             mode = KeyboardMode.TEXT
         )
         Spacer(Modifier.height(8.dp))
         AppTextField(
             value = microstoreCode,
             onValueChange = { microstoreCode = it },
-            label = "Code d'accès Microstore",
+            label = stringResource(R.string.settings_microstore_code),
             mode = KeyboardMode.TEXT
         )
         Spacer(Modifier.height(8.dp))
         AppTextField(
             value = websiteUrl,
             onValueChange = { websiteUrl = it },
-            label = "URL du site internet",
+            label = stringResource(R.string.settings_website_url),
             mode = KeyboardMode.TEXT
-        )
-
-        Spacer(Modifier.height(24.dp))
-        Text("Avis Google", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "L'URL de la page d'avis Google de la boutique. Un QR imprimé en bas de ticket ouvrira directement la page au scan. Astuce : récupère le lien court via Google My Business (format g.page/r/…/review).",
-            fontSize = 12.sp
         )
         Spacer(Modifier.height(8.dp))
         AppTextField(
             value = googleReviewUrl,
             onValueChange = { googleReviewUrl = it },
-            label = "URL d'avis Google",
+            label = stringResource(R.string.settings_google_review_url),
             mode = KeyboardMode.TEXT
         )
 
         Spacer(Modifier.height(24.dp))
-        Text("Imprimante Wi-Fi", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        SectionHeader(stringResource(R.string.settings_section_printer))
         Spacer(Modifier.height(8.dp))
         AppTextField(
             value = ip,
             onValueChange = { ip = it },
-            label = "Adresse IP",
+            label = stringResource(R.string.settings_printer_ip),
             mode = KeyboardMode.IP
         )
         Spacer(Modifier.height(8.dp))
         AppTextField(
             value = portText,
             onValueChange = { portText = it.filter { ch -> ch.isDigit() } },
-            label = "Port",
+            label = stringResource(R.string.settings_printer_port),
             mode = KeyboardMode.NUMBER
         )
 
         Spacer(Modifier.height(24.dp))
-        Text("Scanner", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Si le scan ne fonctionne pas, ajuste l'action broadcast et le nom de l'extra selon le firmware du PDA.",
-            fontSize = 12.sp
-        )
-        Spacer(Modifier.height(8.dp))
-        AppTextField(
-            value = action,
-            onValueChange = { action = it },
-            label = "Action broadcast",
-            mode = KeyboardMode.TEXT
-        )
-        Spacer(Modifier.height(8.dp))
-        AppTextField(
-            value = extra,
-            onValueChange = { extra = it },
-            label = "Nom de l'extra (donnée scannée)",
-            mode = KeyboardMode.TEXT
-        )
-
-        Spacer(Modifier.height(24.dp))
-        Text("Export vers PC (Wi-Fi)", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Chaque canal a un bouton d'export qui envoie un CSV (ouvert par Excel) à cette adresse. Lance le petit serveur Python décrit dans ChannelExporter.kt sur ton PC avant d'exporter.",
-            fontSize = 12.sp
-        )
+        SectionHeader(stringResource(R.string.settings_section_export))
         Spacer(Modifier.height(8.dp))
         AppTextField(
             value = exportUrl,
             onValueChange = { exportUrl = it },
-            label = "URL export PC (ex. http://192.168.1.5:8080/export)",
+            label = stringResource(R.string.settings_export_url),
             mode = KeyboardMode.TEXT
         )
+
+        Spacer(Modifier.height(24.dp))
+        SectionHeader(stringResource(R.string.settings_section_sage))
         Spacer(Modifier.height(8.dp))
         AppTextField(
             value = sageManualArt,
             onValueChange = { sageManualArt = it },
-            label = "Code article Sage pour produits manuels (ex. ART_MANUEL)",
+            label = stringResource(R.string.settings_sage_manual_code),
             mode = KeyboardMode.TEXT
         )
+
+        Spacer(Modifier.height(24.dp))
+        SectionHeader(stringResource(R.string.update_section_title))
+        Spacer(Modifier.height(8.dp))
+        UpdateSection()
 
         Spacer(Modifier.height(24.dp))
         OutlinedButton(
             onClick = { showPreview = true },
             modifier = Modifier.fillMaxWidth().height(48.dp)
-        ) { Text("Aperçu du ticket") }
+        ) { Text(stringResource(R.string.settings_preview_ticket)) }
 
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -245,20 +218,22 @@ fun SettingsScreen(
                             googleReviewUrl = googleReviewUrl.trim(),
                             printerIp = ip.trim().ifBlank { AppSettings.DEFAULT.printerIp },
                             printerPort = portText.toIntOrNull() ?: AppSettings.DEFAULT.printerPort,
-                            scannerAction = action.trim().ifBlank { AppSettings.DEFAULT.scannerAction },
-                            scannerExtra = extra.trim().ifBlank { AppSettings.DEFAULT.scannerExtra },
+                            // Scanner config préservée telle qu'enregistrée
+                            // (plus affichée dans l'UI).
+                            scannerAction = saved.scannerAction,
+                            scannerExtra = saved.scannerExtra,
                             exportUrl = exportUrl.trim(),
                             sageManualArticleCode = sageManualArt.trim()
                         )
                     )
                 },
                 modifier = Modifier.weight(1f).height(48.dp)
-            ) { Text("Enregistrer") }
+            ) { Text(stringResource(R.string.common_save)) }
 
             OutlinedButton(
                 onClick = { vm.testPrint() },
                 modifier = Modifier.weight(1f).height(48.dp)
-            ) { Text("Test imprimante") }
+            ) { Text(stringResource(R.string.settings_test_print)) }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -280,12 +255,69 @@ fun SettingsScreen(
                 googleReviewUrl = googleReviewUrl.trim(),
                 printerIp = ip.trim(),
                 printerPort = portText.toIntOrNull() ?: AppSettings.DEFAULT.printerPort,
-                scannerAction = action.trim(),
-                scannerExtra = extra.trim(),
+                scannerAction = saved.scannerAction,
+                scannerExtra = saved.scannerExtra,
                 exportUrl = exportUrl.trim(),
                 sageManualArticleCode = sageManualArt.trim()
             ),
             onDismiss = { showPreview = false }
+        )
+    }
+}
+
+@Composable
+private fun SectionHeader(text: String) {
+    Text(text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+}
+
+/**
+ * Section "Mises à jour" du Settings. Affiche la version actuelle et un bouton
+ * pour déclencher un check manuel. Le dialog MAJ (si une version est trouvée)
+ * est rendu par [MainActivity.AppRoot] et apparaît automatiquement.
+ */
+@Composable
+private fun UpdateSection() {
+    val updateManager = ScannerApp.instance.updateManager
+    val state by updateManager.state.collectAsStateWithLifecycle()
+    val isBusy = state is UpdateState.Checking ||
+        state is UpdateState.Downloading
+
+    Text(
+        stringResource(R.string.update_current_version, updateManager.currentVersion),
+        fontSize = 14.sp,
+        color = androidx.compose.ui.graphics.Color(0xFF4B5563)
+    )
+    Spacer(Modifier.height(8.dp))
+
+    val statusText = when (state) {
+        is UpdateState.Checking -> stringResource(R.string.update_checking)
+        is UpdateState.UpToDate -> stringResource(R.string.update_up_to_date)
+        is UpdateState.Error -> (state as UpdateState.Error).message
+        else -> null
+    }
+    if (statusText != null) {
+        Text(
+            statusText,
+            fontSize = 12.sp,
+            color = if (state is UpdateState.Error)
+                androidx.compose.ui.graphics.Color(0xFFDC2626)
+            else
+                androidx.compose.ui.graphics.Color(0xFF059669),
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.height(8.dp))
+    }
+
+    Button(
+        onClick = { updateManager.checkForUpdate(silent = false) },
+        enabled = !isBusy,
+        modifier = Modifier.fillMaxWidth().height(48.dp)
+    ) {
+        Text(
+            stringResource(R.string.update_check_button),
+            maxLines = 2,
+            lineHeight = 14.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
     }
 }

@@ -12,5 +12,13 @@ import androidx.room.PrimaryKey
 )
 data class Category(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val name: String
+    val name: String,
+    // Traduction anglaise optionnelle du nom. Utilisée pour imprimer le
+    // ticket en EN. Null = retomber sur `name` à l'impression.
+    val nameEn: String? = null,
+    // Code article Sage 50 propre à cette catégorie (ex. "ART0001").
+    // Facultatif : seuls les utilisateurs qui facturent via Sage le remplissent.
+    // Null → export Sage impossible pour les produits scannés de cette catégorie
+    // (le ChannelExporter bloquera avec un message d'erreur explicite).
+    val sageArticleCode: String? = null
 )

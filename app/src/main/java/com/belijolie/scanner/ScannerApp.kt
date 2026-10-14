@@ -4,6 +4,7 @@ import android.app.Application
 import com.belijolie.scanner.cart.ChannelsRepository
 import com.belijolie.scanner.data.AppDatabase
 import com.belijolie.scanner.data.SettingsStore
+import com.belijolie.scanner.update.UpdateManager
 
 class ScannerApp : Application() {
 
@@ -13,6 +14,8 @@ class ScannerApp : Application() {
         private set
     lateinit var channelsRepo: ChannelsRepository
         private set
+    lateinit var updateManager: UpdateManager
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -20,6 +23,7 @@ class ScannerApp : Application() {
         db = AppDatabase.get(this)
         settingsStore = SettingsStore(this)
         channelsRepo = ChannelsRepository(this)
+        updateManager = UpdateManager(this)
     }
 
     companion object {

@@ -11,7 +11,7 @@ import com.belijolie.scanner.data.entity.Product
 
 @Database(
     entities = [Category::class, Product::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
