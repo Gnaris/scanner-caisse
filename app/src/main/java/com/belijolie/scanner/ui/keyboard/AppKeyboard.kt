@@ -281,6 +281,19 @@ private fun KeyboardDialog(
                         .background(Color.White, RoundedCornerShape(8.dp))
                         .border(1.dp, Color(0xFFD1D5DB), RoundedCornerShape(8.dp))
                         .padding(horizontal = 14.dp, vertical = 14.dp)
+                        // Double-tap sur le champ = tout sélectionner (en plus
+                        // du long-press natif qui sélectionne le mot). Pratique
+                        // pour effacer d'un coup une IP / un barcode / un prix.
+                        // detectTapGestures ne consume PAS les simples taps en
+                        // Compose 1.5+ → le BasicTextField continue à les
+                        // recevoir pour positionner le curseur.
+                        .pointerInput(value) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    selection = TextRange(0, value.length)
+                                }
+                            )
+                        }
                 ) {
                     BasicTextField(
                         value = tfv,

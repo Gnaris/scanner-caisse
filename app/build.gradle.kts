@@ -131,6 +131,12 @@ dependencies {
     // QR code generation for side-by-side bitmap composition on the receipt
     implementation("com.google.zxing:core:3.5.1")
 
+    // Scan QR codes depuis la caméra pour la synchronisation catalogue PDA↔PDA.
+    // Note : exclude zxing core transitif car on utilise déjà notre version.
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0") {
+        exclude(group = "com.google.zxing", module = "core")
+    }
+
     // Debug / preview
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

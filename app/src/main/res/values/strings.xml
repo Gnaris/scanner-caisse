@@ -147,6 +147,30 @@
     <!-- Statut imprimante / export -->
     <string name="status_wifi_not_connected">📶 Wi-Fi non connecté / Wi-Fi 未连接</string>
 
+    <!-- Synchronisation catalogue PDA↔PDA via QR codes -->
+    <string name="sync_section_title">Synchronisation / 同步</string>
+    <string name="sync_section_hint">Partage le catalogue entre PDA via QR codes. / 通过二维码在 PDA 之间共享目录。</string>
+    <string name="sync_export_button">Exporter (afficher QR)\n导出(显示二维码)</string>
+    <string name="sync_import_button">Importer (scanner QR)\n导入(扫描二维码)</string>
+    <string name="sync_export_title">Catalogue à scanner / 待扫描目录</string>
+    <string name="sync_export_progress">QR %1$d / %2$d</string>
+    <string name="sync_export_prev">Précédent / 上一个</string>
+    <string name="sync_export_next">Suivant / 下一个</string>
+    <string name="sync_import_title">Scanner les QR / 扫描二维码</string>
+    <string name="sync_import_waiting">En attente du premier QR… / 等待第一个二维码…</string>
+    <string name="sync_import_progress">%1$d / %2$d QR scannés / 已扫描</string>
+    <string name="sync_import_segment_ok">QR %1$d/%2$d ajouté / 已添加</string>
+    <string name="sync_import_segment_dup">QR %1$d déjà scanné / 已扫描过</string>
+    <string name="sync_import_new_export">Nouveau catalogue détecté, scan réinitialisé. / 检测到新目录,重新开始扫描。</string>
+    <string name="sync_import_foreign">QR non reconnu, ignoré. / 不识别的二维码,已忽略。</string>
+    <string name="sync_confirm_title">Prêt à importer / 准备导入</string>
+    <string name="sync_confirm_body">%1$d catégories et %2$d produits seront fusionnés. Les paramètres de commerce seront remplacés. / 将合并 %1$d 个类别和 %2$d 个商品。店铺参数将被替换。</string>
+    <string name="sync_confirm_import">Importer / 导入</string>
+    <string name="sync_imported">Import OK : %1$d catégories, %2$d produits / 导入成功:%1$d 类别,%2$d 商品</string>
+    <string name="sync_perm_title">Autorisation caméra / 相机权限</string>
+    <string name="sync_perm_body">L\'app a besoin de la caméra arrière pour scanner les QR codes de synchronisation. / 应用需要后置相机扫描同步二维码。</string>
+    <string name="sync_perm_grant">Autoriser / 允许</string>
+
     <!-- Mises à jour auto -->
     <string name="update_section_title">Mises à jour / 更新</string>
     <string name="update_current_version">Version actuelle / 当前版本 : %1$s</string>

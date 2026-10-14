@@ -11,6 +11,12 @@
          une fois dans Paramètres → Apps → Scanner Caisse. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Caméra arrière du PDA pour la synchronisation PDA↔PDA via QR codes
+         (export/import catalogue). Demandée à l'exécution au premier scan. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
     <!-- Permet au QUERY_ALL_PACKAGES-safe canRequestPackageInstalls() de
          fonctionner correctement sur Android 11+. -->
     <queries>
