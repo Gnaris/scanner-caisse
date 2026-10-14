@@ -4,14 +4,14 @@
 #   .\release-local.ps1 1.0.10
 #
 # Le script :
-#   1. Vérifie que la working tree est clean
+#   1. Verifie que la working tree est clean
 #   2. Push le code sur origin/main
-#   3. Build l'APK release signé avec le keystore local
-#   4. Crée la Release GitHub + le tag (via gh release create)
+#   3. Build l'APK release signe avec le keystore local
+#   4. Cree la Release GitHub + le tag (via gh release create)
 #
-# NB : le workflow CI va AUSSI se déclencher sur le push du tag et re-builder
-# le même APK en parallèle (~4 min). C'est inoffensif — softprops/action-gh-release
-# écrase le même binaire. Ignore juste la run CI, ta release est déjà en ligne.
+# NB : le workflow CI va AUSSI se declencher sur le push du tag et re-builder
+# le meme APK en parallele (~4 min). C'est inoffensif, softprops/action-gh-release
+# ecrase le meme binaire. Ignore juste la run CI, ta release est deja en ligne.
 
 param(
     [Parameter(Mandatory=$true, Position=0)]
@@ -21,7 +21,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not ($Version -match '^\d+\.\d+\.\d+$')) {
-    Write-Host "ERREUR : la version doit être au format X.Y.Z (ex : 1.0.10)" -ForegroundColor Red
+    Write-Host "ERREUR : la version doit etre au format X.Y.Z (ex : 1.0.10)" -ForegroundColor Red
     exit 1
 }
 
@@ -42,10 +42,10 @@ if ($status) {
     exit 1
 }
 
-# Vérifie que le tag n'existe pas déjà
+# Verifie que le tag n'existe pas deja
 $existingTag = git tag -l $Tag
 if ($existingTag) {
-    Write-Host "ERREUR : le tag $Tag existe déjà en local. Utilise un numéro différent." -ForegroundColor Red
+    Write-Host "ERREUR : le tag $Tag existe deja en local. Utilise un numero different." -ForegroundColor Red
     exit 1
 }
 
@@ -59,7 +59,7 @@ Write-Host ""
 Write-Host "[2/4] Build release APK (version=$Version, versionCode=$VersionCode)..." -ForegroundColor Yellow
 & ".\gradlew.bat" assembleRelease "-PversionName=$Version" "-PversionCode=$VersionCode"
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "ERREUR : build Gradle échoué" -ForegroundColor Red
+    Write-Host "ERREUR : build Gradle echoue" -ForegroundColor Red
     exit 1
 }
 
@@ -68,32 +68,29 @@ $ApkDst = "scanner-caisse-$Version.apk"
 if (Test-Path $ApkDst) { Remove-Item $ApkDst -Force }
 Copy-Item "app\build\outputs\apk\release\app-release.apk" $ApkDst
 $sizeMB = [math]::Round((Get-Item $ApkDst).Length / 1MB, 1)
-Write-Host "APK prêt : $ApkDst ($sizeMB Mo)" -ForegroundColor Green
+Write-Host "APK pret : $ApkDst ($sizeMB Mo)" -ForegroundColor Green
 
-# 5. Create GitHub Release (crée aussi le tag sur origin)
+# 5. Create GitHub Release
 Write-Host ""
-Write-Host "[3/4] Création de la Release GitHub..." -ForegroundColor Yellow
+Write-Host "[3/4] Creation de la Release GitHub..." -ForegroundColor Yellow
 gh release create $Tag $ApkDst `
     --title "Scanner Caisse v$Version" `
     --generate-notes `
     --target main
 if ($LASTEXITCODE -ne 0) {
     Remove-Item $ApkDst -Force
-    Write-Host "ERREUR : création de la Release échouée" -ForegroundColor Red
+    Write-Host "ERREUR : creation de la Release echouee" -ForegroundColor Red
     exit 1
 }
 
 # 6. Sync local tag + cleanup
 Write-Host ""
-Write-Host "[4/4] Récupération du tag local..." -ForegroundColor Yellow
-# PowerShell 5.1 traite stderr de git comme une erreur fatale (NativeCommandError).
-# Pour contourner, on wrap dans un try{} + redirection stderr seul vers $null.
+Write-Host "[4/4] Recuperation du tag local..." -ForegroundColor Yellow
 try {
     $env:GIT_TERMINAL_PROMPT = "0"
     & git fetch origin --tags 2>$null
 } catch {
-    # Non-fatal : le tag est déjà sur GitHub, le fetch local n'est que du confort.
-    Write-Host "  (fetch local échoué — pas critique, le tag est sur GitHub)" -ForegroundColor DarkGray
+    Write-Host "  (fetch local echoue - pas critique, le tag est sur GitHub)" -ForegroundColor DarkGray
 }
 
 Remove-Item $ApkDst -Force
