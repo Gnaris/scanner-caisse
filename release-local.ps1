@@ -86,7 +86,15 @@ if ($LASTEXITCODE -ne 0) {
 # 6. Sync local tag + cleanup
 Write-Host ""
 Write-Host "[4/4] Récupération du tag local..." -ForegroundColor Yellow
-git fetch origin --tags 2>&1 | Out-Null
+# PowerShell 5.1 traite stderr de git comme une erreur fatale (NativeCommandError).
+# Pour contourner, on wrap dans un try{} + redirection stderr seul vers $null.
+try {
+    $env:GIT_TERMINAL_PROMPT = "0"
+    & git fetch origin --tags 2>$null
+} catch {
+    # Non-fatal : le tag est déjà sur GitHub, le fetch local n'est que du confort.
+    Write-Host "  (fetch local échoué — pas critique, le tag est sur GitHub)" -ForegroundColor DarkGray
+}
 
 Remove-Item $ApkDst -Force
 
