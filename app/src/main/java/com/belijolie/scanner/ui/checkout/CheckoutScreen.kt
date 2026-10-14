@@ -193,6 +193,26 @@ fun CheckoutScreen(
             )
         }
 
+        // Mini bloc "dernier scan" — toujours au-dessus du header des colonnes.
+        // Click → dialog d'édition catégorie / quantité / prix. Un nouveau scan
+        // le remplace. Clear à l'impression ou au changement de canal.
+        val lastScan by vm.lastScan.collectAsStateWithLifecycle()
+        var showLastScanEdit by remember { mutableStateOf(false) }
+        lastScan?.let { scan ->
+            LastScanBlock(scan = scan, onClick = { showLastScanEdit = true })
+        }
+        if (showLastScanEdit && lastScan != null) {
+            EditLastScanDialog(
+                scan = lastScan!!,
+                categories = categories,
+                onDismiss = { showLastScanEdit = false },
+                onConfirm = { newCategory, newPriceCents, newQty ->
+                    vm.editLastScan(newCategory, newPriceCents, newQty)
+                    showLastScanEdit = false
+                }
+            )
+        }
+
         // Compact column header
         Row(
             modifier = Modifier
@@ -679,6 +699,154 @@ internal fun formatEuro(cents: Int): String {
     val euros = cents / 100
     val remainder = cents % 100
     return "%d,%02d €".format(euros, remainder)
+}
+
+/**
+ * Mini bande affichant le dernier produit scanné (catégorie / quantité / prix
+ * unitaire). Click → ouvre [EditLastScanDialog] pour corriger. Un nouveau
+ * scan remplace cette bande. Clear à l'impression ou au changement de canal.
+ */
+@Composable
+private fun LastScanBlock(
+    scan: LastScan,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 2.dp)
+            .height(36.dp)
+            .clickable(onClick = onClick),
+        color = Color(0xFFFFEDD5),
+        shape = RoundedCornerShape(6.dp),
+        tonalElevation = 1.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "✎",
+                color = Color(0xFF9A3412),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                scan.categoryName,
+                color = Color(0xFF7C2D12),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                "×${scan.quantity}",
+                color = Color(0xFF9A3412),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                formatEuro(scan.priceCents),
+                color = Color(0xFF7C2D12),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+/**
+ * Dialog d'édition du dernier scan. Champs catégorie (dropdown), quantité,
+ * prix. Confirmer → VM annule l'ancien ajout et rejoue avec les nouvelles
+ * valeurs.
+ */
+@Composable
+private fun EditLastScanDialog(
+    scan: LastScan,
+    categories: List<com.belijolie.scanner.data.entity.Category>,
+    onDismiss: () -> Unit,
+    onConfirm: (categoryName: String, priceCents: Int, quantity: Int) -> Unit,
+) {
+    var categoryName by remember { mutableStateOf(scan.categoryName) }
+    var qtyText by remember { mutableStateOf(scan.quantity.toString()) }
+    var priceText by remember {
+        mutableStateOf("%d.%02d".format(scan.priceCents / 100, scan.priceCents % 100))
+    }
+    var expanded by remember { mutableStateOf(false) }
+
+    val qty = qtyText.toIntOrNull()?.coerceAtLeast(1)
+    val priceCents = run {
+        val n = priceText.replace(',', '.').toDoubleOrNull()
+        if (n == null || n < 0) null else (n * 100).toInt()
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.checkout_last_scan_edit)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    stringResource(R.string.checkout_last_scan_hint),
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                )
+                Column {
+                    Text(stringResource(R.string.checkout_header_category), fontSize = 12.sp, color = Color.Gray)
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White, RoundedCornerShape(6.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
+                            .clickable { expanded = true }
+                            .padding(horizontal = 12.dp, vertical = 14.dp)
+                    ) {
+                        Text(categoryName.ifBlank { "—" }, fontSize = 15.sp)
+                    }
+                    androidx.compose.material3.DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                    ) {
+                        categories.forEach { c ->
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(c.name) },
+                                onClick = {
+                                    categoryName = c.name
+                                    expanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+                AppTextField(
+                    value = qtyText,
+                    onValueChange = { qtyText = it.filter { c -> c.isDigit() } },
+                    label = stringResource(R.string.checkout_quantity),
+                    mode = KeyboardMode.NUMBER,
+                )
+                AppTextField(
+                    value = priceText,
+                    onValueChange = { priceText = it },
+                    label = stringResource(R.string.product_price),
+                    mode = KeyboardMode.DECIMAL,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = categoryName.isNotBlank() && qty != null && priceCents != null,
+                onClick = {
+                    if (qty != null && priceCents != null) {
+                        onConfirm(categoryName, priceCents, qty)
+                    }
+                }
+            ) { Text(stringResource(R.string.common_save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } }
+    )
 }
 
 /**

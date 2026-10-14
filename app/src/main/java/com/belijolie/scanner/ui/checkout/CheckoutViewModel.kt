@@ -30,6 +30,27 @@ import kotlinx.coroutines.launch
 
 data class PrintResult(val success: Boolean, val message: String)
 
+/**
+ * Snapshot du dernier produit ajouté au panier via scan (ou création via le
+ * modal "produit inconnu"). Utilisé pour afficher le mini bloc "dernier scan"
+ * au-dessus du panier et permettre une édition rapide (catégorie / quantité
+ * / prix) — l'édition annule le scan précédent et re-rejoue avec les
+ * nouvelles valeurs.
+ *
+ * Garde le [productId] et le [barcode] pour que l'ajout corrigé puisse
+ * continuer à référencer le produit DB existant.
+ */
+data class LastScan(
+    val productId: Long,
+    val barcode: String,
+    val categoryName: String,
+    val priceCents: Int,
+    val quantity: Int,
+    val categoryNameEn: String? = null,
+    val nameEn: String? = null,
+    val sageArticleCode: String? = null,
+)
+
 class CheckoutViewModel(
     private val channelsRepo: ChannelsRepository,
     private val settingsStore: SettingsStore,
@@ -74,6 +95,9 @@ class CheckoutViewModel(
         _scanMultiplier.value = n.coerceAtLeast(1)
     }
 
+    private val _lastScan = MutableStateFlow<LastScan?>(null)
+    val lastScan: StateFlow<LastScan?> = _lastScan.asStateFlow()
+
     init {
         // Collect barcodes scanned anywhere in the app while this VM is alive.
         viewModelScope.launch {
@@ -107,6 +131,16 @@ class CheckoutViewModel(
             nameEn = product.product.nameEn,
             sageArticleCode = product.category.sageArticleCode,
             quantity = qty
+        )
+        _lastScan.value = LastScan(
+            productId = product.product.id,
+            barcode = product.product.barcode,
+            categoryName = product.category.name,
+            priceCents = product.product.priceCents,
+            quantity = qty,
+            categoryNameEn = product.category.nameEn,
+            nameEn = product.product.nameEn,
+            sageArticleCode = product.category.sageArticleCode,
         )
         // Le multiplicateur reste tel quel après le scan — l'utilisateur le
         // remet à 1 lui-même quand il a terminé le lot.
@@ -214,6 +248,15 @@ class CheckoutViewModel(
                 categoryNameEn = category.nameEn,
                 sageArticleCode = category.sageArticleCode
             )
+            _lastScan.value = LastScan(
+                productId = id,
+                barcode = cleanedBarcode,
+                categoryName = category.name,
+                priceCents = priceCents,
+                quantity = 1,
+                categoryNameEn = category.nameEn,
+                sageArticleCode = category.sageArticleCode,
+            )
             _unknownBarcode.value = null
         }
     }
@@ -235,6 +278,16 @@ class CheckoutViewModel(
                 nameEn = product.product.nameEn,
                 sageArticleCode = product.category.sageArticleCode
             )
+            _lastScan.value = LastScan(
+                productId = product.product.id,
+                barcode = product.product.barcode,
+                categoryName = product.category.name,
+                priceCents = product.product.priceCents,
+                quantity = 1,
+                categoryNameEn = product.category.nameEn,
+                nameEn = product.product.nameEn,
+                sageArticleCode = product.category.sageArticleCode,
+            )
             _unknownBarcode.value = null
         }
     }
@@ -243,11 +296,68 @@ class CheckoutViewModel(
         viewModelScope.launch {
             val index = channelsRepo.current().channels.size + 1
             channelsRepo.createChannel("Client $index")
+            // Nouveau canal → le dernier scan précédent n'a plus de sens.
+            _lastScan.value = null
         }
     }
 
     fun selectChannel(id: String) {
-        viewModelScope.launch { channelsRepo.setActive(id) }
+        viewModelScope.launch {
+            channelsRepo.setActive(id)
+            // Changement de canal → l'historique du dernier scan appartient
+            // à l'autre canal, on efface pour éviter une édition erronée.
+            _lastScan.value = null
+        }
+    }
+
+    /**
+     * Édition rapide du dernier scan : annule l'ajout précédent (en
+     * décrémentant la quantité de la ligne match avec les anciennes valeurs,
+     * voire en supprimant la ligne) puis rejoue avec les nouvelles valeurs.
+     *
+     * Si la ligne originale n'existe plus (ex : supprimée manuellement par
+     * la poubelle entre-temps), on skip l'annulation et on ajoute juste la
+     * nouvelle version.
+     */
+    fun editLastScan(newCategoryName: String, newPriceCents: Int, newQuantity: Int) {
+        val last = _lastScan.value ?: return
+        val cleanedCat = newCategoryName.trim().ifBlank { last.categoryName }
+        val qty = newQuantity.coerceAtLeast(1)
+        viewModelScope.launch {
+            val st = channelsRepo.current()
+            val channel = st.channels.firstOrNull { it.id == st.activeChannelId } ?: return@launch
+            // 1. Annule l'ancien scan en retirant last.quantity de la ligne
+            //    match (categoryName + priceCents).
+            val oldLine = channel.lines.firstOrNull {
+                it.categoryName == last.categoryName && it.unitPriceCents == last.priceCents
+            }
+            if (oldLine != null) {
+                channelsRepo.setLineQuantityInActive(
+                    oldLine.productId,
+                    oldLine.quantity - last.quantity,
+                )
+            }
+            // 2. Récupère les métadonnées EN / Sage de la nouvelle catégorie
+            //    si elle existe en DB (sinon null).
+            val newCat = db.categoryDao().findByName(cleanedCat)
+            channelsRepo.addProductToActive(
+                productId = last.productId,
+                barcode = last.barcode,
+                categoryName = cleanedCat,
+                priceCents = newPriceCents,
+                categoryNameEn = newCat?.nameEn,
+                nameEn = last.nameEn,
+                sageArticleCode = newCat?.sageArticleCode,
+                quantity = qty,
+            )
+            _lastScan.value = last.copy(
+                categoryName = cleanedCat,
+                priceCents = newPriceCents,
+                quantity = qty,
+                categoryNameEn = newCat?.nameEn,
+                sageArticleCode = newCat?.sageArticleCode,
+            )
+        }
     }
 
     fun renameChannel(id: String, newName: String) {
@@ -317,6 +427,8 @@ class CheckoutViewModel(
             _isPrinting.value = false
             if (result.isSuccess) {
                 channelsRepo.bumpTicketNumber()
+                // Ticket imprimé → le dernier scan n'est plus modifiable.
+                _lastScan.value = null
                 _printResult.value = PrintResult(true, ctx.getString(R.string.checkout_ticket_printed))
             } else {
                 val msg = result.exceptionOrNull()?.toHumanMessage(ctx)

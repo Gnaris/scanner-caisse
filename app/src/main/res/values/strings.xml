@@ -35,7 +35,7 @@
     <string name="checkout_export_sent">Export envoyé / 导出已发送 : %1$s</string>
     <string name="checkout_total_quantity">Quantité totale / 商品总数</string>
     <string name="checkout_total_ht">Total HT / 税前总计</string>
-    <string name="checkout_total_vat">TVA / 增值税 (20%%)</string>
+    <string name="checkout_total_vat">TVA / 增值税 (20%)</string>
     <string name="checkout_total_ttc">Total TTC / 税后总计</string>
     <string name="checkout_action_cash">Encaissement / 收款</string>
     <string name="checkout_action_export">Exporter / 导出</string>
@@ -91,7 +91,13 @@
 
     <!-- Caisse : multiplicateur de quantité -->
     <string name="checkout_qty_mult_label">Quantité par scan / 每次扫描数量</string>
-    <string name="checkout_qty_mult_hint">Chaque code-barres scanné sera ajouté avec cette quantité. Remis à 1 après chaque scan. / 每次扫描将以此数量添加。扫描后重置为 1。</string>
+    <string name="checkout_qty_mult_hint">Chaque code-barres scanné sera ajouté avec cette quantité. Reste jusqu\'à ce que tu le modifies à nouveau. / 每次扫描将以此数量添加。保持不变直到您再次修改。</string>
+
+    <!-- Caisse : mini bloc "dernier scan" -->
+    <string name="checkout_last_scan_label">Dernier scan / 最后扫描</string>
+    <string name="checkout_last_scan_edit">Modifier le dernier scan / 编辑最后扫描</string>
+    <string name="checkout_last_scan_hint">Ces changements vont annuler le dernier produit scanné et le rajouter avec les nouvelles valeurs. Pas de retour en arrière sur les scans précédents. / 这些更改将取消最后扫描的商品并以新值重新添加。无法撤回之前的扫描。</string>
+    <string name="checkout_quantity">Quantité / 数量</string>
 
     <!-- Encaissement (caisse espèces) -->
     <string name="cash_title">Encaissement / 收款</string>

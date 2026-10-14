@@ -82,6 +82,18 @@ data class Channel(
     fun removeLine(productId: Long): Channel =
         copy(lines = lines.filterNot { it.productId == productId })
 
+    /**
+     * Positionne la quantité absolue d'une ligne. Si [quantity] ≤ 0 la ligne
+     * est retirée. Utilisé pour "annuler le dernier scan" en soustrayant la
+     * quantité ajoutée au scan précédent.
+     */
+    fun setLineQuantity(productId: Long, quantity: Int): Channel {
+        if (quantity <= 0) return removeLine(productId)
+        return copy(lines = lines.map {
+            if (it.productId == productId) it.copy(quantity = quantity) else it
+        })
+    }
+
     fun rename(newName: String): Channel = copy(name = newName)
 }
 

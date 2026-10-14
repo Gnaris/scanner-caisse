@@ -93,6 +93,15 @@ class ChannelsRepository(private val context: Context) {
         save(st.copy(channels = updated))
     }
 
+    suspend fun setLineQuantityInActive(productId: Long, quantity: Int) {
+        val st = current()
+        val activeId = st.activeChannelId ?: return
+        val updated = st.channels.map { ch ->
+            if (ch.id == activeId) ch.setLineQuantity(productId, quantity) else ch
+        }
+        save(st.copy(channels = updated))
+    }
+
     /** Called after a successful print: bumps the ticket counter, keeps the channel open. */
     suspend fun bumpTicketNumber(): Int {
         val st = current()
