@@ -115,7 +115,10 @@ fun CategoriesScreen(
             confirmLabel = stringResource(R.string.common_add),
             initialName = "",
             initialNameEn = "",
-            initialSage = "",
+            // Pré-remplit le prochain code Sage libre (ART0001, ART0002, …).
+            // Scanne les codes existants, saute ceux pris, format sur 4 chiffres.
+            // L'utilisateur peut toujours modifier manuellement avant de valider.
+            initialSage = suggestNextSageCode(categories),
             onDismiss = { showAdd = false },
             onConfirm = { name, nameEn, sage ->
                 vm.add(name, nameEn, sage)
@@ -147,6 +150,22 @@ fun CategoriesScreen(
             confirmButton = { TextButton(onClick = vm::dismissError) { Text(stringResource(R.string.common_ok)) } }
         )
     }
+}
+
+/**
+ * Scanne les codes articles Sage déjà pris sur les catégories existantes et
+ * renvoie le prochain `ART000X` libre. Les codes qui ne matchent pas le
+ * pattern (saisis à la main différemment par l'utilisateur) sont ignorés.
+ */
+private fun suggestNextSageCode(categories: List<Category>): String {
+    val pattern = Regex("^ART(\\d+)$")
+    val used = categories
+        .mapNotNull { it.sageArticleCode?.trim() }
+        .mapNotNull { pattern.matchEntire(it)?.groupValues?.get(1)?.toIntOrNull() }
+        .toSet()
+    var n = 1
+    while (n in used) n++
+    return "ART%04d".format(n)
 }
 
 @Composable
