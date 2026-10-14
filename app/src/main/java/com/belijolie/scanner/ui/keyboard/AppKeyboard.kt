@@ -336,7 +336,11 @@ private fun KeyboardDialog(
                                 label = "cursorAlpha"
                             )
                             val strokePx = with(LocalDensity.current) { 2.dp.toPx() }
-                            Canvas(modifier = Modifier.fillMaxSize()) {
+                            // matchParentSize() : prend la taille du Box parent
+                            // sans participer à la mesure. fillMaxSize() ferait
+                            // exploser le Canvas à l'écran entier et pousserait
+                            // le clavier hors de l'écran.
+                            Canvas(modifier = Modifier.matchParentSize()) {
                                 drawLine(
                                     color = Color(0xFF4F46E5).copy(alpha = alpha),
                                     start = Offset(cursorRect.left, cursorRect.top),
