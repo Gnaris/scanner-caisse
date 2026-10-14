@@ -65,8 +65,17 @@ data class Channel(
                 )
             }
         } else {
+            // Évite les collisions de productId quand une ligne existante avec
+            // ce même id a été éditée pour avoir une autre (cat, prix) : si on
+            // rescanne le produit original, on crée une 2e ligne avec le même
+            // productId → crash LazyColumn ("Key already used"). Dans ce cas
+            // on alloue un id négatif unique à la nouvelle ligne (comme pour
+            // les produits manuels), elle reste liée à la DB via le barcode.
+            val safeId = if (lines.any { it.productId == productId })
+                -System.nanoTime()
+            else productId
             lines + CartLine(
-                productId = productId,
+                productId = safeId,
                 barcode = barcode,
                 categoryName = categoryName,
                 unitPriceCents = priceCents,

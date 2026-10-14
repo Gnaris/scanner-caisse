@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -266,7 +268,12 @@ fun CheckoutScreen(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    items(sortedLines, key = { it.productId }) { line ->
+                    // Clé composite : productId seul peut collisionner si une
+                    // ligne a été éditée (changement cat/prix) puis qu'on
+                    // rescan le produit original — les 2 lignes garderaient
+                    // le même productId. (categoryName + priceCents) complète
+                    // suffit car fusion déjà faite par Channel.addProduct.
+                    items(sortedLines, key = { "${it.productId}_${it.categoryName}_${it.unitPriceCents}" }) { line ->
                         val bold = (categoryIndexByName[line.categoryName] ?: 0) % 2 == 1
                         Surface(
                             shape = RoundedCornerShape(8.dp),
@@ -797,7 +804,10 @@ private fun EditCartLineDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.checkout_line_edit)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
                 Column {
                     Text(stringResource(R.string.checkout_header_category), fontSize = 12.sp, color = Color.Gray)
                     Spacer(Modifier.height(4.dp))
@@ -940,7 +950,13 @@ private fun EditLastScanDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.checkout_last_scan_edit)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // verticalScroll pour que le hint + 3 champs tiennent dans la
+            // zone content de l'AlertDialog (sinon le dernier champ est
+            // écrasé/aplati car Material3 impose une hauteur max).
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
                 Text(
                     stringResource(R.string.checkout_last_scan_hint),
                     fontSize = 11.sp,
