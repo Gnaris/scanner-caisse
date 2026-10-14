@@ -101,7 +101,12 @@ class CheckoutViewModel(
      * le caller peut la sélectionner directement sans que l'utilisateur ait à
      * recommencer sa saisie.
      */
-    fun createCategory(name: String, onCreated: (Long) -> Unit) {
+    fun createCategory(
+        name: String,
+        nameEn: String?,
+        sageArticleCode: String?,
+        onCreated: (Long) -> Unit,
+    ) {
         viewModelScope.launch {
             val cleaned = name.trim()
             if (cleaned.isEmpty()) return@launch
@@ -110,8 +115,15 @@ class CheckoutViewModel(
                 onCreated(existing.id)
                 return@launch
             }
-            val id = runCatching { db.categoryDao().insert(Category(name = cleaned)) }
-                .getOrNull() ?: return@launch
+            val id = runCatching {
+                db.categoryDao().insert(
+                    Category(
+                        name = cleaned,
+                        nameEn = nameEn?.trim()?.takeIf { it.isNotEmpty() },
+                        sageArticleCode = sageArticleCode?.trim()?.takeIf { it.isNotEmpty() },
+                    )
+                )
+            }.getOrNull() ?: return@launch
             onCreated(id)
         }
     }

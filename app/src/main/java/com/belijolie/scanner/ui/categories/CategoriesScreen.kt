@@ -41,6 +41,7 @@ import com.belijolie.scanner.data.entity.Category
 import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
 import com.belijolie.scanner.util.CategoryTranslator
+import com.belijolie.scanner.util.suggestNextSageCode
 
 @Composable
 fun CategoriesScreen(
@@ -150,22 +151,6 @@ fun CategoriesScreen(
             confirmButton = { TextButton(onClick = vm::dismissError) { Text(stringResource(R.string.common_ok)) } }
         )
     }
-}
-
-/**
- * Scanne les codes articles Sage déjà pris sur les catégories existantes et
- * renvoie le prochain `ART000X` libre. Les codes qui ne matchent pas le
- * pattern (saisis à la main différemment par l'utilisateur) sont ignorés.
- */
-private fun suggestNextSageCode(categories: List<Category>): String {
-    val pattern = Regex("^ART(\\d+)$")
-    val used = categories
-        .mapNotNull { it.sageArticleCode?.trim() }
-        .mapNotNull { pattern.matchEntire(it)?.groupValues?.get(1)?.toIntOrNull() }
-        .toSet()
-    var n = 1
-    while (n in used) n++
-    return "ART%04d".format(n)
 }
 
 @Composable

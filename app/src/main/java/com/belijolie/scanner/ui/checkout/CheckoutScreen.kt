@@ -304,7 +304,9 @@ fun CheckoutScreen(
                 vm.createAndAddToCart(barcode, categoryId, cents)
             },
             onPick = { productId -> vm.addExistingToCart(productId) },
-            onCreateCategory = { name, onCreated -> vm.createCategory(name, onCreated) }
+            onCreateCategory = { name, nameEn, sage, onCreated ->
+                vm.createCategory(name, nameEn, sage, onCreated)
+            }
         )
     }
 
