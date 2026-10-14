@@ -108,9 +108,8 @@ class CheckoutViewModel(
             sageArticleCode = product.category.sageArticleCode,
             quantity = qty
         )
-        // Reset auto après chaque scan — évite d'empiler x138 par erreur sur
-        // le scan suivant si l'utilisateur oublie de remettre à 1.
-        _scanMultiplier.value = 1
+        // Le multiplicateur reste tel quel après le scan — l'utilisateur le
+        // remet à 1 lui-même quand il a terminé le lot.
     }
 
     /**

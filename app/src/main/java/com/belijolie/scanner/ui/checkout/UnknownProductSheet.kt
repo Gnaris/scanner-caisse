@@ -39,7 +39,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -79,7 +81,19 @@ fun UnknownProductSheet(
         )
     ) {
         Box(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                // Consomme TOUS les key events (sauf BACK) qui atterrissent sur
+                // le dialog pour éviter que le wedge scanner (qui envoie des
+                // keystrokes trailing après un scan) n'active un bouton ou
+                // n'ouvre le dropdown catégorie par accident juste après
+                // qu'un code-barres introuvable ait ouvert le modal.
+                .onPreviewKeyEvent { event ->
+                    event.nativeKeyEvent.keyCode != android.view.KeyEvent.KEYCODE_BACK
+                }
+                // Interdit le focus auto sur le Box racine pour que le modal
+                // ne vole pas le focus à la racine composable.
+                .focusProperties { canFocus = false },
             contentAlignment = Alignment.BottomCenter
         ) {
             Column(

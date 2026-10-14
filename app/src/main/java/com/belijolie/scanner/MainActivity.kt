@@ -3,10 +3,17 @@ package com.belijolie.scanner
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -15,7 +22,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
@@ -26,7 +39,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.belijolie.scanner.scanner.ScanReceiver
 import com.belijolie.scanner.ui.Destination
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import com.belijolie.scanner.ui.categories.CategoriesScreen
@@ -73,11 +85,20 @@ private fun AppRoot() {
     val updateManager = ScannerApp.instance.updateManager
     val updateState by updateManager.state.collectAsStateWithLifecycle()
 
-    // Check silencieux 3s après le lancement : si pas de MAJ, aucun dialog
-    // n'apparaît ; si une MAJ est dispo, UpdateDialog s'affiche automatiquement.
+    // Au démarrage on bloque l'UI avec un splash tant que le check de MAJ n'a
+    // pas aboutit. Le splash disparaît dès qu'on sort de Checking → UpToDate /
+    // Available / Error (ou Idle si l'updater est désactivé en debug).
+    var initialCheckDone by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        delay(3_000)
-        updateManager.checkForUpdate(silent = true)
+        updateManager.checkForUpdate(silent = false)
+    }
+    LaunchedEffect(updateState) {
+        if (updateState !is UpdateState.Checking) initialCheckDone = true
+    }
+
+    if (!initialCheckDone) {
+        StartupSplash()
+        return
     }
 
     if (updateState !is UpdateState.Idle &&
@@ -147,6 +168,41 @@ private fun AppRoot() {
             composable(Destination.Products.route) { ProductsScreen() }
             composable(Destination.Categories.route) { CategoriesScreen() }
             composable(Destination.Settings.route) { SettingsScreen() }
+        }
+    }
+}
+
+/**
+ * Splash plein écran affiché au tout démarrage pendant que l'app vérifie si
+ * une mise à jour est disponible. Bloque toute interaction avec la caisse
+ * tant qu'on ne sait pas si une version plus récente est à installer, pour
+ * éviter que l'utilisateur fasse une transaction sur une version obsolète.
+ */
+@androidx.compose.runtime.Composable
+private fun StartupSplash() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF4F46E5)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                stringResource(R.string.app_name),
+                color = Color.White,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp)
+            Spacer(Modifier.size(4.dp))
+            Text(
+                stringResource(R.string.update_checking),
+                color = Color.White,
+                fontSize = 14.sp,
+            )
         }
     }
 }
