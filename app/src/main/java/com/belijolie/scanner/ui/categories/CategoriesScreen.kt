@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -82,12 +84,10 @@ fun CategoriesScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(c.name, fontWeight = FontWeight.SemiBold)
-                            // Métadonnées complémentaires (EN / code Sage) affichées en petit
-                            // dessous du nom pour que l'utilisateur voie d'un coup d'œil
-                            // ce qui est configuré sans ouvrir la fiche.
                             val meta = buildList {
                                 c.nameEn?.takeIf { it.isNotBlank() }?.let { add("EN : $it") }
                                 c.sageArticleCode?.takeIf { it.isNotBlank() }?.let { add("Sage : $it") }
+                                c.barcodePrefix?.takeIf { it.isNotBlank() }?.let { add("Préfixe : $it") }
                             }.joinToString(" · ")
                             if (meta.isNotEmpty()) {
                                 Text(
@@ -116,13 +116,11 @@ fun CategoriesScreen(
             confirmLabel = stringResource(R.string.common_add),
             initialName = "",
             initialNameEn = "",
-            // Pré-remplit le prochain code Sage libre (ART0001, ART0002, …).
-            // Scanne les codes existants, saute ceux pris, format sur 4 chiffres.
-            // L'utilisateur peut toujours modifier manuellement avant de valider.
             initialSage = suggestNextSageCode(categories),
+            initialBarcodePrefix = "",
             onDismiss = { showAdd = false },
-            onConfirm = { name, nameEn, sage ->
-                vm.add(name, nameEn, sage)
+            onConfirm = { name, nameEn, sage, prefix ->
+                vm.add(name, nameEn, sage, prefix)
                 showAdd = false
             }
         )
@@ -135,9 +133,10 @@ fun CategoriesScreen(
             initialName = cat.name,
             initialNameEn = cat.nameEn.orEmpty(),
             initialSage = cat.sageArticleCode.orEmpty(),
+            initialBarcodePrefix = cat.barcodePrefix.orEmpty(),
             onDismiss = { categoryToEdit = null },
-            onConfirm = { name, nameEn, sage ->
-                vm.update(cat, name, nameEn, sage)
+            onConfirm = { name, nameEn, sage, prefix ->
+                vm.update(cat, name, nameEn, sage, prefix)
                 categoryToEdit = null
             }
         )
@@ -160,8 +159,9 @@ private fun CategoryEditDialog(
     initialName: String,
     initialNameEn: String,
     initialSage: String,
+    initialBarcodePrefix: String,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, nameEn: String, sage: String) -> Unit
+    onConfirm: (name: String, nameEn: String, sage: String, barcodePrefix: String) -> Unit
 ) {
     var name by remember { mutableStateOf(initialName) }
     var nameEn by remember { mutableStateOf(initialNameEn) }
@@ -170,19 +170,20 @@ private fun CategoryEditDialog(
     // que son contenu correspond encore à la précédente suggestion.
     var lastSuggestion by remember { mutableStateOf(initialNameEn) }
     var sage by remember { mutableStateOf(initialSage) }
+    var barcodePrefix by remember { mutableStateOf(initialBarcodePrefix) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
                 AppTextField(
                     value = name,
                     onValueChange = { newName ->
                         name = newName
-                        // Suggestion auto de la traduction tant que le champ EN est
-                        // vide OU qu'il contient encore notre précédente suggestion
-                        // (donc "pas touché par l'utilisateur").
                         val suggestion = CategoryTranslator.suggestEnglishName(newName).orEmpty()
                         if (nameEn.isBlank() || nameEn == lastSuggestion) {
                             nameEn = suggestion
@@ -209,12 +210,23 @@ private fun CategoryEditDialog(
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.Gray
                 )
+                AppTextField(
+                    value = barcodePrefix,
+                    onValueChange = { barcodePrefix = it },
+                    label = stringResource(R.string.category_barcode_prefix),
+                    mode = KeyboardMode.NUMBER
+                )
+                Text(
+                    stringResource(R.string.category_barcode_prefix_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray
+                )
             }
         },
         confirmButton = {
             TextButton(
                 enabled = name.isNotBlank(),
-                onClick = { onConfirm(name, nameEn, sage) }
+                onClick = { onConfirm(name, nameEn, sage, barcodePrefix) }
             ) { Text(confirmLabel) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } }

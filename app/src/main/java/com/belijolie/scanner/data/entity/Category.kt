@@ -20,5 +20,9 @@ data class Category(
     // Facultatif : seuls les utilisateurs qui facturent via Sage le remplissent.
     // Null → export Sage impossible pour les produits scannés de cette catégorie
     // (le ChannelExporter bloquera avec un message d'erreur explicite).
-    val sageArticleCode: String? = null
+    val sageArticleCode: String? = null,
+    // Préfixe de code-barres associé à cette catégorie (ex. "22222"). Si un
+    // code-barres inconnu scanné commence par ce préfixe, cette catégorie
+    // sera pré-sélectionnée dans le modal "créer produit". Facultatif.
+    val barcodePrefix: String? = null
 )

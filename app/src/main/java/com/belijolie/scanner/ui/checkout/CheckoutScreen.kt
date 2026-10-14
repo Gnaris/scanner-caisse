@@ -138,22 +138,59 @@ fun CheckoutScreen(
             }
         )
 
+        val scanMultiplier by vm.scanMultiplier.collectAsStateWithLifecycle()
+        var showMultiplierDialog by remember { mutableStateOf(false) }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 2.dp)
+                .padding(horizontal = 10.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Button(
                 onClick = { showAddManual = true },
                 shape = RoundedCornerShape(6.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0EA5E9)),
                 contentPadding = PaddingValues(0.dp),
-                modifier = Modifier.fillMaxWidth().height(34.dp)
+                modifier = Modifier.weight(1f).height(34.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(stringResource(R.string.checkout_add_product), color = Color.White, fontSize = 13.sp)
             }
+            // Mini carré "quantité par scan". Click → ouvre un AlertDialog
+            // avec clavier numérique pour éditer la valeur. Reset auto à 1
+            // après chaque scan côté VM.
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .background(
+                        if (scanMultiplier > 1) Color(0xFFF59E0B) else Color(0xFF374151),
+                        RoundedCornerShape(6.dp)
+                    )
+                    .clickable { showMultiplierDialog = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "×$scanMultiplier",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
+        }
+
+        if (showMultiplierDialog) {
+            MultiplierDialog(
+                current = scanMultiplier,
+                onDismiss = { showMultiplierDialog = false },
+                onConfirm = {
+                    vm.setScanMultiplier(it)
+                    showMultiplierDialog = false
+                }
+            )
         }
 
         // Compact column header
@@ -642,4 +679,48 @@ internal fun formatEuro(cents: Int): String {
     val euros = cents / 100
     val remainder = cents % 100
     return "%d,%02d €".format(euros, remainder)
+}
+
+/**
+ * Dialog d'édition du multiplicateur de quantité par scan. Clavier NUMBER
+ * pour saisie rapide, OK désactivé si le champ est vide.
+ */
+@Composable
+private fun MultiplierDialog(
+    current: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit
+) {
+    var text by remember { mutableStateOf(current.toString()) }
+    val parsed = text.toIntOrNull()?.coerceAtLeast(1)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.checkout_qty_mult_label)) },
+        text = {
+            Column {
+                AppTextField(
+                    value = text,
+                    onValueChange = { text = it.filter { c -> c.isDigit() } },
+                    label = stringResource(R.string.checkout_qty_mult_label),
+                    mode = KeyboardMode.NUMBER
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.checkout_qty_mult_hint),
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = parsed != null,
+                onClick = { parsed?.let { onConfirm(it) } }
+            ) { Text(stringResource(R.string.common_ok)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+        }
+    )
 }

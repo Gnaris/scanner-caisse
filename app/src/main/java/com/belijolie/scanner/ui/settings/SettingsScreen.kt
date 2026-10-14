@@ -238,13 +238,29 @@ fun SettingsScreen(
                         )
                     )
                 },
-                modifier = Modifier.weight(1f).height(48.dp)
-            ) { Text(stringResource(R.string.common_save)) }
+                modifier = Modifier.weight(1f).height(60.dp)
+            ) {
+                Text(
+                    stringResource(R.string.common_save),
+                    maxLines = 2,
+                    lineHeight = 14.sp,
+                    fontSize = 12.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
 
             OutlinedButton(
                 onClick = { vm.testPrint() },
-                modifier = Modifier.weight(1f).height(48.dp)
-            ) { Text(stringResource(R.string.settings_test_print)) }
+                modifier = Modifier.weight(1f).height(60.dp)
+            ) {
+                Text(
+                    stringResource(R.string.settings_test_print),
+                    maxLines = 2,
+                    lineHeight = 14.sp,
+                    fontSize = 12.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -319,24 +335,26 @@ private fun SyncSection(snackbar: SnackbarHostState) {
                 }
             },
             enabled = !exporting,
-            modifier = Modifier.weight(1f).height(56.dp),
+            modifier = Modifier.weight(1f).height(60.dp),
         ) {
             Text(
                 stringResource(R.string.sync_export_button),
                 maxLines = 2,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 lineHeight = 14.sp,
+                fontSize = 12.sp,
             )
         }
         OutlinedButton(
             onClick = { showImport = true },
-            modifier = Modifier.weight(1f).height(56.dp),
+            modifier = Modifier.weight(1f).height(60.dp),
         ) {
             Text(
                 stringResource(R.string.sync_import_button),
                 maxLines = 2,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 lineHeight = 14.sp,
+                fontSize = 12.sp,
             )
         }
     }

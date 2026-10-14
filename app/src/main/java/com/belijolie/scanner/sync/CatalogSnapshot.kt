@@ -25,6 +25,7 @@ data class CategoryDto(
     val name: String,
     val nameEn: String? = null,
     val sageArticleCode: String? = null,
+    val barcodePrefix: String? = null,
 )
 
 /**

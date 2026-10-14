@@ -169,8 +169,15 @@ private fun CreateForm(
     onConfirm: (categoryId: Long, priceCents: Int) -> Unit,
     onCreateCategory: (name: String, nameEn: String?, sage: String?, onCreated: (Long) -> Unit) -> Unit
 ) {
-    var categoryId by remember(categories.size) {
-        mutableLongStateOf(categories.lastOrNull()?.id ?: 0L)
+    // Pré-sélection par préfixe : si une catégorie a un `barcodePrefix` qui
+    // matche le début du code-barres scanné, on la choisit par défaut. Sinon
+    // on retombe sur la dernière catégorie créée.
+    var categoryId by remember(categories.size, barcode) {
+        val byPrefix = categories.firstOrNull { c ->
+            val p = c.barcodePrefix?.trim().orEmpty()
+            p.isNotEmpty() && barcode.startsWith(p)
+        }
+        mutableLongStateOf(byPrefix?.id ?: categories.lastOrNull()?.id ?: 0L)
     }
     val autoCents = remember(barcode) { decodePriceFromBarcode(barcode) }
     var priceText by remember(barcode) {

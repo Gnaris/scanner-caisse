@@ -22,7 +22,7 @@ class CategoriesViewModel(private val db: AppDatabase) : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    fun add(name: String, nameEn: String?, sageArticleCode: String?) {
+    fun add(name: String, nameEn: String?, sageArticleCode: String?, barcodePrefix: String?) {
         viewModelScope.launch {
             val cleaned = name.trim()
             if (cleaned.isEmpty()) return@launch
@@ -36,7 +36,8 @@ class CategoriesViewModel(private val db: AppDatabase) : ViewModel() {
                     Category(
                         name = cleaned,
                         nameEn = nameEn?.trim()?.takeIf { it.isNotEmpty() },
-                        sageArticleCode = sageArticleCode?.trim()?.takeIf { it.isNotEmpty() }
+                        sageArticleCode = sageArticleCode?.trim()?.takeIf { it.isNotEmpty() },
+                        barcodePrefix = barcodePrefix?.trim()?.takeIf { it.isNotEmpty() }
                     )
                 )
             }.onFailure { _error.value = "Impossible d'ajouter cette catégorie." }
@@ -50,7 +51,7 @@ class CategoriesViewModel(private val db: AppDatabase) : ViewModel() {
         }
     }
 
-    fun update(category: Category, newName: String, nameEn: String?, sageArticleCode: String?) {
+    fun update(category: Category, newName: String, nameEn: String?, sageArticleCode: String?, barcodePrefix: String?) {
         viewModelScope.launch {
             val cleanedName = newName.trim()
             if (cleanedName.isEmpty()) return@launch
@@ -67,7 +68,8 @@ class CategoriesViewModel(private val db: AppDatabase) : ViewModel() {
                     category.copy(
                         name = cleanedName,
                         nameEn = nameEn?.trim()?.takeIf { it.isNotEmpty() },
-                        sageArticleCode = sageArticleCode?.trim()?.takeIf { it.isNotEmpty() }
+                        sageArticleCode = sageArticleCode?.trim()?.takeIf { it.isNotEmpty() },
+                        barcodePrefix = barcodePrefix?.trim()?.takeIf { it.isNotEmpty() }
                     )
                 )
             }.onFailure {

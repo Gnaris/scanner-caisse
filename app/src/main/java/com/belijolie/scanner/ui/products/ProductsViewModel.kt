@@ -53,6 +53,39 @@ class ProductsViewModel(
         viewModelScope.launch { db.productDao().deleteById(product.id) }
     }
 
+    /**
+     * Mise à jour d'un produit existant : barcode, catégorie, prix. Si le
+     * nouveau barcode est déjà pris par un autre produit (unicité DB), on
+     * remonte une erreur et on ne modifie rien.
+     */
+    fun update(
+        product: Product,
+        newBarcode: String,
+        newCategoryId: Long,
+        newPriceCents: Int,
+    ) {
+        viewModelScope.launch {
+            val cleaned = newBarcode.trim()
+            if (cleaned.isEmpty() || newCategoryId == 0L) return@launch
+            if (!cleaned.equals(product.barcode, ignoreCase = true)) {
+                val existing = db.productDao().findByBarcode(cleaned)
+                if (existing != null && existing.product.id != product.id) {
+                    _error.value = "Code-barres « $cleaned » déjà utilisé par ${existing.category.name}."
+                    return@launch
+                }
+            }
+            runCatching {
+                db.productDao().update(
+                    product.copy(
+                        barcode = cleaned,
+                        categoryId = newCategoryId,
+                        priceCents = newPriceCents,
+                    )
+                )
+            }.onFailure { _error.value = "Impossible de mettre à jour le produit." }
+        }
+    }
+
     fun dismissError() { _error.value = null }
 
     class Factory : ViewModelProvider.Factory {

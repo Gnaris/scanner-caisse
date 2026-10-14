@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -63,6 +64,7 @@ fun ProductsScreen(
     val categories by vm.categories.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     var showAdd by remember { mutableStateOf(false) }
+    var productToEdit by remember { mutableStateOf<ProductWithCategory?>(null) }
 
     Scaffold(
         floatingActionButton = {
@@ -87,7 +89,13 @@ fun ProductsScreen(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(12.dp)
             ) {
-                items(products, key = { it.product.id }) { p -> ProductRow(p, onDelete = { vm.delete(p.product) }) }
+                items(products, key = { it.product.id }) { p ->
+                    ProductRow(
+                        p,
+                        onEdit = { productToEdit = p },
+                        onDelete = { vm.delete(p.product) },
+                    )
+                }
             }
         }
     }
@@ -103,6 +111,18 @@ fun ProductsScreen(
         )
     }
 
+    productToEdit?.let { pwc ->
+        EditProductDialog(
+            product = pwc,
+            categories = categories,
+            onDismiss = { productToEdit = null },
+            onConfirm = { barcode, categoryId, cents ->
+                vm.update(pwc.product, barcode, categoryId, cents)
+                productToEdit = null
+            }
+        )
+    }
+
     error?.let { msg ->
         AlertDialog(
             onDismissRequest = vm::dismissError,
@@ -114,7 +134,7 @@ fun ProductsScreen(
 }
 
 @Composable
-private fun ProductRow(p: ProductWithCategory, onDelete: () -> Unit) {
+private fun ProductRow(p: ProductWithCategory, onEdit: () -> Unit, onDelete: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -124,11 +144,71 @@ private fun ProductRow(p: ProductWithCategory, onDelete: () -> Unit) {
             Text(p.product.barcode, color = Color.Gray)
         }
         Text(formatEuro(p.product.priceCents), fontWeight = FontWeight.Bold)
+        IconButton(onClick = onEdit) {
+            Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.common_edit))
+        }
         IconButton(onClick = onDelete) {
             Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.common_delete))
         }
     }
     HorizontalDivider()
+}
+
+/**
+ * Dialog d'édition d'un produit existant. Mêmes champs que l'ajout (barcode,
+ * catégorie, prix) préremplis depuis le produit cliqué.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditProductDialog(
+    product: ProductWithCategory,
+    categories: List<Category>,
+    onDismiss: () -> Unit,
+    onConfirm: (barcode: String, categoryId: Long, priceCents: Int) -> Unit
+) {
+    var barcode by remember { mutableStateOf(product.product.barcode) }
+    var priceText by remember {
+        mutableStateOf("%d.%02d".format(product.product.priceCents / 100, product.product.priceCents % 100))
+    }
+    var categoryId by remember { mutableLongStateOf(product.category.id) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.product_edit_title)) },
+        text = {
+            Column {
+                AppTextField(
+                    value = barcode,
+                    onValueChange = { barcode = it },
+                    label = stringResource(R.string.product_barcode),
+                    mode = KeyboardMode.NUMBER
+                )
+                Spacer(Modifier.height(12.dp))
+                CategorySelector(
+                    categories = categories,
+                    selectedId = categoryId,
+                    onSelected = { categoryId = it }
+                )
+                Spacer(Modifier.height(12.dp))
+                AppTextField(
+                    value = priceText,
+                    onValueChange = { priceText = it },
+                    label = stringResource(R.string.product_price),
+                    mode = KeyboardMode.DECIMAL
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = barcode.isNotBlank() && categoryId != 0L && parseCents(priceText) != null,
+                onClick = {
+                    val cents = parseCents(priceText) ?: return@TextButton
+                    onConfirm(barcode.trim(), categoryId, cents)
+                }
+            ) { Text(stringResource(R.string.common_save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

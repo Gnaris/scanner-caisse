@@ -33,6 +33,7 @@ class SyncManager(
                     name = c.name,
                     nameEn = c.nameEn,
                     sageArticleCode = c.sageArticleCode,
+                    barcodePrefix = c.barcodePrefix,
                 )
             },
             products = products.mapNotNull { p ->
@@ -67,6 +68,7 @@ class SyncManager(
                         name = dto.name,
                         nameEn = dto.nameEn?.takeIf { it.isNotBlank() },
                         sageArticleCode = dto.sageArticleCode?.takeIf { it.isNotBlank() },
+                        barcodePrefix = dto.barcodePrefix?.takeIf { it.isNotBlank() },
                     )
                 )
                 categoriesInserted++
@@ -76,6 +78,8 @@ class SyncManager(
                         nameEn = dto.nameEn?.takeIf { it.isNotBlank() } ?: existing.nameEn,
                         sageArticleCode = dto.sageArticleCode?.takeIf { it.isNotBlank() }
                             ?: existing.sageArticleCode,
+                        barcodePrefix = dto.barcodePrefix?.takeIf { it.isNotBlank() }
+                            ?: existing.barcodePrefix,
                     )
                 )
                 categoriesUpdated++

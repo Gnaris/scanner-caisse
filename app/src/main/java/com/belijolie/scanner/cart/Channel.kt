@@ -43,20 +43,22 @@ data class Channel(
         priceCents: Int,
         categoryNameEn: String? = null,
         nameEn: String? = null,
-        sageArticleCode: String? = null
+        sageArticleCode: String? = null,
+        quantity: Int = 1
     ): Channel {
+        val qty = quantity.coerceAtLeast(1)
         val existing = lines.indexOfFirst {
             it.categoryName == categoryName && it.unitPriceCents == priceCents
         }
         val newLines = if (existing >= 0) {
             lines.toMutableList().also {
-                // Fusion : incrémente la quantité et rafraîchit les champs
-                // "snapshot" (EN / sage) si la nouvelle valeur n'est pas null —
-                // utile quand on scanne la 1re fois une catégorie qui vient
-                // d'être enrichie en DB.
+                // Fusion : incrémente la quantité par [qty] et rafraîchit les
+                // champs "snapshot" (EN / sage) si la nouvelle valeur n'est
+                // pas null — utile quand on scanne la 1re fois une catégorie
+                // qui vient d'être enrichie en DB.
                 val current = it[existing]
                 it[existing] = current.copy(
-                    quantity = current.quantity + 1,
+                    quantity = current.quantity + qty,
                     categoryNameEn = categoryNameEn ?: current.categoryNameEn,
                     nameEn = nameEn ?: current.nameEn,
                     sageArticleCode = sageArticleCode ?: current.sageArticleCode
@@ -68,7 +70,7 @@ data class Channel(
                 barcode = barcode,
                 categoryName = categoryName,
                 unitPriceCents = priceCents,
-                quantity = 1,
+                quantity = qty,
                 categoryNameEn = categoryNameEn,
                 nameEn = nameEn,
                 sageArticleCode = sageArticleCode

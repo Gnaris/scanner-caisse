@@ -61,6 +61,19 @@ class CheckoutViewModel(
     private val _isExporting = MutableStateFlow(false)
     val isExporting: StateFlow<Boolean> = _isExporting.asStateFlow()
 
+    /**
+     * Multiplicateur de quantité pour le prochain scan. Mis à 1 par défaut,
+     * modifié via l'UI (petit carré à côté du bouton "Ajouter produit"), reset
+     * à 1 automatiquement après chaque scan réussi pour éviter d'empiler
+     * accidentellement de grosses quantités sur les scans suivants.
+     */
+    private val _scanMultiplier = MutableStateFlow(1)
+    val scanMultiplier: StateFlow<Int> = _scanMultiplier.asStateFlow()
+
+    fun setScanMultiplier(n: Int) {
+        _scanMultiplier.value = n.coerceAtLeast(1)
+    }
+
     init {
         // Collect barcodes scanned anywhere in the app while this VM is alive.
         viewModelScope.launch {
@@ -84,6 +97,7 @@ class CheckoutViewModel(
             return
         }
         ScanSounds.playFound()
+        val qty = _scanMultiplier.value.coerceAtLeast(1)
         channelsRepo.addProductToActive(
             productId = product.product.id,
             barcode = product.product.barcode,
@@ -91,8 +105,12 @@ class CheckoutViewModel(
             priceCents = product.product.priceCents,
             categoryNameEn = product.category.nameEn,
             nameEn = product.product.nameEn,
-            sageArticleCode = product.category.sageArticleCode
+            sageArticleCode = product.category.sageArticleCode,
+            quantity = qty
         )
+        // Reset auto après chaque scan — évite d'empiler x138 par erreur sur
+        // le scan suivant si l'utilisateur oublie de remettre à 1.
+        _scanMultiplier.value = 1
     }
 
     /**

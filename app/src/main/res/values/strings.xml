@@ -79,12 +79,19 @@
     <string name="category_name_en">Nom (EN) — pour impression ticket anglais / 英文名称——用于英文小票</string>
     <string name="category_sage_code">Code article Sage 50 (optionnel) / Sage 50 商品代码(可选)</string>
     <string name="category_sage_hint">Le code article Sage n\'est requis que si tu exportes vers Sage 50. / 仅在导出到 Sage 50 时需要此代码。</string>
+    <string name="category_barcode_prefix">Préfixe code-barres (optionnel) / 条形码前缀(可选)</string>
+    <string name="category_barcode_prefix_hint">Si un code-barres scanné commence par ce préfixe, cette catégorie sera pré-sélectionnée dans la création de produit. / 如果扫描的条形码以此前缀开头,创建商品时将预选此类别。</string>
 
     <!-- Produits -->
     <string name="product_empty">Aucun produit. Appuie sur + pour en créer.\n还没有商品,点击 + 新建。</string>
     <string name="product_barcode">Code-barres / 条形码</string>
     <string name="product_price">Prix / 价格 (€)</string>
     <string name="product_no_category_hint">Crée d\'abord une catégorie dans l\'onglet « Catégories ». / 请先在"类别"标签中创建一个类别。</string>
+    <string name="product_edit_title">Modifier le produit / 编辑商品</string>
+
+    <!-- Caisse : multiplicateur de quantité -->
+    <string name="checkout_qty_mult_label">Quantité par scan / 每次扫描数量</string>
+    <string name="checkout_qty_mult_hint">Chaque code-barres scanné sera ajouté avec cette quantité. Remis à 1 après chaque scan. / 每次扫描将以此数量添加。扫描后重置为 1。</string>
 
     <!-- Encaissement (caisse espèces) -->
     <string name="cash_title">Encaissement / 收款</string>
@@ -150,8 +157,8 @@
     <!-- Synchronisation catalogue PDA↔PDA via QR codes -->
     <string name="sync_section_title">Synchronisation / 同步</string>
     <string name="sync_section_hint">Partage le catalogue entre PDA via QR codes. / 通过二维码在 PDA 之间共享目录。</string>
-    <string name="sync_export_button">Exporter (afficher QR)\n导出(显示二维码)</string>
-    <string name="sync_import_button">Importer (scanner QR)\n导入(扫描二维码)</string>
+    <string name="sync_export_button">Exporter\n导出</string>
+    <string name="sync_import_button">Importer\n导入</string>
     <string name="sync_export_title">Catalogue à scanner / 待扫描目录</string>
     <string name="sync_export_progress">QR %1$d / %2$d</string>
     <string name="sync_export_prev">Précédent / 上一个</string>
