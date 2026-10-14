@@ -302,6 +302,26 @@ debug (APK installable localement mais JAMAIS à publier).
 
 ### Publier une nouvelle version Android
 
+**Option A — release locale rapide (~1 min, recommandé)** :
+
+```powershell
+# Commit d'abord ta modif comme d'habitude, puis :
+.\release-local.ps1 1.0.10
+```
+
+Le script `release-local.ps1` à la racine :
+1. Vérifie que la working tree est clean
+2. Push le code sur origin/main
+3. Build l'APK release signé en local (via keystore.properties)
+4. Crée la Release GitHub + le tag en une fois via `gh release create`
+
+Le workflow CI (`android-release.yml`) se déclenche quand même sur le push
+du tag et rebuilde le même APK en parallèle (~4 min). C'est inoffensif —
+`softprops/action-gh-release` écrase le même binaire. L'important c'est
+que la release est en ligne tout de suite via le script local.
+
+**Option B — tout en CI (~4 min, backup)** :
+
 ```bash
 # 1. Mettre à jour le code
 git add .
@@ -313,7 +333,7 @@ git tag app-v1.0.1
 git push origin app-v1.0.1
 ```
 
-~3 minutes plus tard, la Release GitHub est publiée avec
+~4 minutes plus tard, la Release GitHub est publiée avec
 `scanner-caisse-1.0.1.apk` en asset. Les PDA installés chez le client
 détectent la MAJ au prochain lancement (check silencieux 3s après démarrage)
 ou via le bouton **Vérifier les mises à jour** dans Settings.
