@@ -178,15 +178,24 @@ private fun CreateForm(
     categories: List<Category>,
     onConfirm: (categoryId: Long, priceCents: Int) -> Unit,
 ) {
-    // Pré-sélection par préfixe : si une catégorie a un `barcodePrefix` qui
-    // matche le début du code-barres scanné, on la choisit par défaut. Sinon
-    // on retombe sur la dernière catégorie créée.
-    var categoryId by remember(categories.size, barcode) {
-        val byPrefix = categories.firstOrNull { c ->
-            val p = c.barcodePrefix?.trim().orEmpty()
-            p.isNotEmpty() && barcode.startsWith(p)
-        }
-        mutableLongStateOf(byPrefix?.id ?: categories.lastOrNull()?.id ?: 0L)
+    // Pré-sélection par préfixe : parmi toutes les catégories dont le
+    // `barcodePrefix` est préfixe du code-barres scanné, on prend celle avec
+    // le préfixe LE PLUS LONG (= le plus spécifique). Ex : si Boucles a
+    // "11111" et Divers a "1", un code "11111320" matche les 2 mais Boucles
+    // gagne. Si AUCUN préfixe ne match → aucune pré-sélection : l'ancien
+    // fallback sur `categories.lastOrNull()` prenait silencieusement la
+    // dernière catégorie alphabétique, ce qui faisait apparaître des choix
+    // "au hasard" (ex. Pendentif) sans que l'utilisateur comprenne pourquoi.
+    val cleanedBarcode = barcode.trim()
+    var categoryId by remember(categories.size, cleanedBarcode) {
+        val byPrefix = categories
+            .mapNotNull { c ->
+                val p = c.barcodePrefix?.trim().orEmpty()
+                if (p.isNotEmpty() && cleanedBarcode.startsWith(p)) c to p.length else null
+            }
+            .maxByOrNull { it.second }
+            ?.first
+        mutableLongStateOf(byPrefix?.id ?: 0L)
     }
     val autoCents = remember(barcode) { decodePriceFromBarcode(barcode) }
     var priceText by remember(barcode) {
