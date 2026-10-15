@@ -207,71 +207,62 @@ private fun ChannelCard(
     val totalTva = Math.round(totalHt * 0.20).toInt()
     val totalTtc = totalHt + totalTva
 
-    // Fix du double-clic : au lieu d'avoir un parent `clickable` qui contient
-    // des enfants `clickable` (= focusables → premier tap sert à prendre le
-    // focus parent, deuxième à exécuter), on sépare physiquement la carte
-    // en 2 zones :
-    //  - La zone "ouvrir" (weight 1f) qui est le SEUL élément clickable sur
-    //    toute la zone. Aucun enfant interactif → simple tap garanti.
-    //  - Les 2 Box d'action à droite, qui vivent dans le même Row mais
-    //    HORS de la zone cliquable. Chacune a son propre clickable isolé.
+    // clickable sur la Row externe → le ripple d'ouverture couvre toute la
+    // carte (y compris derrière les Box d'action). Les Box enfants ont leur
+    // propre `clickable` qui consomme leur tap avant qu'il remonte au
+    // parent → simple clic sur elles, simple clic sur le reste.
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color.White),
+            .background(Color.White)
+            .clickable(onClick = onOpen)
+            .padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .clickable(onClick = onOpen)
-                .padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        channel.name,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF111827),
-                    )
-                    if (channel.discountPercent > 0) {
-                        Spacer(Modifier.width(6.dp))
-                        DiscountBadge(channel.discountPercent)
-                    }
-                }
-                Spacer(Modifier.height(2.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    stringResource(R.string.channel_items_count, itemsCount),
-                    fontSize = 12.sp,
-                    color = Color(0xFF6B7280),
-                )
-            }
-            Column(
-                horizontalAlignment = Alignment.End,
-                modifier = Modifier.padding(end = 8.dp),
-            ) {
-                Text(
-                    formatEuro(totalTtc),
+                    channel.name,
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF111827),
                 )
-                Text(
-                    "TTC",
-                    fontSize = 10.sp,
-                    color = Color(0xFF6B7280),
-                )
+                if (channel.discountPercent > 0) {
+                    Spacer(Modifier.width(6.dp))
+                    DiscountBadge(channel.discountPercent)
+                }
             }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                stringResource(R.string.channel_items_count, itemsCount),
+                fontSize = 12.sp,
+                color = Color(0xFF6B7280),
+            )
         }
-        // Actions à droite, hors zone cliquable "ouvrir".
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier.padding(end = 8.dp),
+        ) {
+            Text(
+                formatEuro(totalTtc),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF111827),
+            )
+            Text(
+                "TTC",
+                fontSize = 10.sp,
+                color = Color(0xFF6B7280),
+            )
+        }
+        // Hitbox "modifier" : clickable isolé, consomme son tap.
         Box(
             modifier = Modifier
                 .padding(end = 6.dp)
                 .size(40.dp)
-                .background(Color(0xFFE5E7EB), RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFFE5E7EB))
                 .clickable(onClick = onRename),
             contentAlignment = Alignment.Center,
         ) {
@@ -282,11 +273,12 @@ private fun ChannelCard(
                 modifier = Modifier.size(20.dp),
             )
         }
+        // Hitbox "supprimer".
         Box(
             modifier = Modifier
-                .padding(end = 8.dp)
                 .size(40.dp)
-                .background(Color(0xFFFEE2E2), RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFFFEE2E2))
                 .clickable(onClick = onClose),
             contentAlignment = Alignment.Center,
         ) {
