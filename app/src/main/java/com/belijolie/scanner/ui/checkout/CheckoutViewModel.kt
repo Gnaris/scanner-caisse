@@ -110,10 +110,10 @@ class CheckoutViewModel(
         if (_unknownBarcode.value != null) return
 
         val st = channelsRepo.current()
-        if (st.activeChannelId == null) {
-            // Auto-create a first channel so a scan is never lost.
-            channelsRepo.createChannel("Client 1")
-        }
+        // Nouvelle UX : pas d'auto-création de canal. L'utilisateur passe
+        // forcément par la liste → bouton « Créer un canal » → détail. Un
+        // scan hors d'un canal ouvert est ignoré (décision produit).
+        if (st.activeChannelId == null) return
         val product = db.productDao().findByBarcode(barcode)
         if (product == null) {
             ScanSounds.playNotFound()
@@ -292,6 +292,17 @@ class CheckoutViewModel(
         }
     }
 
+    /**
+     * Crée un nouveau canal et retourne son id. Utilisé par l'écran liste
+     * pour chaîner création + navigation vers le détail.
+     */
+    suspend fun newChannelAndGetId(): String {
+        val index = channelsRepo.current().channels.size + 1
+        val channel = channelsRepo.createChannel("Client $index")
+        _lastScan.value = null
+        return channel.id
+    }
+
     fun newChannel() {
         viewModelScope.launch {
             val index = channelsRepo.current().channels.size + 1
@@ -308,6 +319,22 @@ class CheckoutViewModel(
             // à l'autre canal, on efface pour éviter une édition erronée.
             _lastScan.value = null
         }
+    }
+
+    /**
+     * Désactive le canal courant (plus aucun canal « actif »). Appelé à
+     * l'entrée de l'écran liste des canaux : un scan de produit depuis la
+     * liste ne doit alimenter aucun panier.
+     */
+    fun clearActiveChannel() {
+        viewModelScope.launch {
+            channelsRepo.clearActive()
+            _lastScan.value = null
+        }
+    }
+
+    fun setDiscount(percent: Int) {
+        viewModelScope.launch { channelsRepo.setDiscountInActive(percent) }
     }
 
     /**
@@ -442,7 +469,8 @@ class CheckoutViewModel(
                 EscPosPrinter.printReceipt(
                     settings = settings,
                     lines = sortLines(active.lines),
-                    lang = lang
+                    lang = lang,
+                    discountPercent = active.discountPercent
                 )
             }
             _isPrinting.value = false

@@ -16,9 +16,23 @@ val keystoreProps = Properties().apply {
     }
 }
 
+// Charge version.properties (committed) : contient versionName/versionCode de
+// la dernière release publiée. Utilisé comme fallback quand Gradle est lancé
+// SANS -PversionName (ex. Android Studio ▶ Run) → l'APK local a la même
+// version que la Release GitHub la plus récente, donc l'updater ne propose
+// pas une MAJ qu'on vient d'installer. release-local.ps1 bump ce fichier
+// avant chaque release.
+val versionPropsFile = rootProject.file("version.properties")
+val versionProps = Properties().apply {
+    if (versionPropsFile.exists()) {
+        versionPropsFile.inputStream().use { load(it) }
+    }
+}
+
 fun resolveProp(name: String): String? =
     (findProperty(name) as? String)
         ?: keystoreProps.getProperty(name)
+        ?: versionProps.getProperty(name)
         ?: System.getenv(name)
 
 android {

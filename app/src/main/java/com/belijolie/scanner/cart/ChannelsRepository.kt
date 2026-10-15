@@ -48,8 +48,21 @@ class ChannelsRepository(private val context: Context) {
         return channel
     }
 
-    suspend fun setActive(channelId: String) {
+    suspend fun setActive(channelId: String?) {
         save(current().copy(activeChannelId = channelId))
+    }
+
+    suspend fun clearActive() {
+        save(current().copy(activeChannelId = null))
+    }
+
+    suspend fun setDiscountInActive(percent: Int) {
+        val st = current()
+        val activeId = st.activeChannelId ?: return
+        val updated = st.channels.map { ch ->
+            if (ch.id == activeId) ch.setDiscount(percent) else ch
+        }
+        save(st.copy(channels = updated))
     }
 
     suspend fun rename(channelId: String, newName: String) {

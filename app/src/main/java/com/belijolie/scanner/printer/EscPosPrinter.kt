@@ -63,7 +63,8 @@ object EscPosPrinter {
     suspend fun printReceipt(
         settings: AppSettings,
         lines: List<CartLine>,
-        lang: TicketLang = TicketLang.FR
+        lang: TicketLang = TicketLang.FR,
+        discountPercent: Int = 0
     ) = withContext(Dispatchers.IO) {
         val connection = TcpConnection(settings.printerIp, settings.printerPort, SOCKET_TIMEOUT_MS)
         val printer = EscPosPrinter(connection, DPI, PAPER_WIDTH_MM, CHARS_PER_LINE)
@@ -135,7 +136,7 @@ object EscPosPrinter {
                 // 0 QR → rien
             }
 
-            printer.printFormattedText(buildReceipt(settings, lines, lang, qrBitmapsHex))
+            printer.printFormattedText(buildReceipt(settings, lines, lang, qrBitmapsHex, discountPercent))
             val cmds = printer.commands()
             cmds.feedPaper(500)
             cmds.cutPaper()
@@ -164,7 +165,8 @@ object EscPosPrinter {
         settings: AppSettings,
         lines: List<CartLine>,
         lang: TicketLang,
-        qrBitmapsHex: List<String> = emptyList()
+        qrBitmapsHex: List<String> = emptyList(),
+        discountPercent: Int = 0
     ): String = buildString {
         val labels = TicketLabels.of(lang)
         val dateLocale = if (lang == TicketLang.EN) Locale.ENGLISH else Locale.FRANCE
@@ -247,17 +249,35 @@ object EscPosPrinter {
         append("[L]").append(DIVIDER).append('\n')
 
         // ---------- Totals (tight, no extra blank) ----------
-        val totalTva = totalTtcCents - totalHtCents
-        val totalHt = totalHtCents
+        // Remise appliquée au HT brut. La TVA et le TTC sont recalculés après
+        // remise pour rester cohérents (la TVA ne porte pas sur une somme que
+        // le client ne paye pas).
+        val pct = discountPercent.coerceIn(0, 100)
+        val discountCents = if (pct <= 0) 0 else Math.round(totalHtCents * pct / 100.0).toInt()
+        val totalHt = totalHtCents - discountCents
+        val totalTva = calcTvaCents(totalHt)
+        val finalTtc = totalHt + totalTva
 
         append("[L]").append(PAD).append(labels.totalQuantity).append("[R]")
             .append("x").append(totalQty.toString()).append(PAD).append('\n')
-        append("[L]").append(PAD).append(labels.totalNet).append("[R]")
-            .append(formatPrice(totalHt)).append(" €").append(PAD).append('\n')
+        if (pct > 0) {
+            // Impossible de vraiment barrer en ESC/POS sans tricher avec un
+            // underline. On affiche 3 lignes explicites : HT brut, remise,
+            // HT remisé en gras pour matérialiser le résultat final.
+            append("[L]").append(PAD).append(labels.totalNet).append("[R]")
+                .append(formatPrice(totalHtCents)).append(" €").append(PAD).append('\n')
+            append("[L]").append(PAD).append(labels.discountLabel).append(" -").append(pct).append("%").append("[R]")
+                .append("-").append(formatPrice(discountCents)).append(" €").append(PAD).append('\n')
+            append("[L]").append(PAD).append("<b>").append(labels.totalNetAfter).append("[R]")
+                .append(formatPrice(totalHt)).append(" €</b>").append(PAD).append('\n')
+        } else {
+            append("[L]").append(PAD).append(labels.totalNet).append("[R]")
+                .append(formatPrice(totalHt)).append(" €").append(PAD).append('\n')
+        }
         append("[L]").append(PAD).append(labels.totalVat).append("[R]")
             .append(formatPrice(totalTva)).append(" €").append(PAD).append('\n')
         append("[L]").append(PAD).append("<b>").append(labels.totalGross).append("[R]")
-            .append(formatPrice(totalTtcCents)).append(" €</b>").append(PAD).append('\n')
+            .append(formatPrice(finalTtc)).append(" €</b>").append(PAD).append('\n')
 
         // ---------- Sections QR (dynamiques : 0, 1 ou 2 bitmaps) ----------
         // [C]<img> : l'imprimante centre l'image sur la zone imprimable.

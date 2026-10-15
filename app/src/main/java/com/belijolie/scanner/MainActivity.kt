@@ -33,16 +33,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.belijolie.scanner.scanner.ScanReceiver
 import com.belijolie.scanner.ui.Destination
+import com.belijolie.scanner.ui.SubRoutes
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import com.belijolie.scanner.ui.categories.CategoriesScreen
-import com.belijolie.scanner.ui.checkout.CheckoutScreen
+import com.belijolie.scanner.ui.checkout.ChannelDetailScreen
+import com.belijolie.scanner.ui.checkout.ChannelsListScreen
 import com.belijolie.scanner.ui.products.ProductsScreen
 import com.belijolie.scanner.ui.settings.SettingsScreen
 import com.belijolie.scanner.ui.theme.ScannerTheme
@@ -82,7 +86,7 @@ class MainActivity : ComponentActivity() {
 private fun AppRoot() {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
-    val currentRoute = backStack?.destination?.route ?: Destination.Checkout.route
+    val currentRoute = backStack?.destination?.route ?: Destination.Channels.route
 
     val updateManager = ScannerApp.instance.updateManager
     val updateState by updateManager.state.collectAsStateWithLifecycle()
@@ -137,12 +141,18 @@ private fun AppRoot() {
             ) {
                 Destination.entries.forEach { dest ->
                     val label = stringResource(dest.labelRes)
+                    // L'onglet « Canal » reste surligné quand on est dans le
+                    // détail d'un canal (route "channel/{id}"), pour cohérence
+                    // visuelle utilisateur.
+                    val isChannelsTab = dest == Destination.Channels &&
+                        (currentRoute == Destination.Channels.route ||
+                            currentRoute?.startsWith("channel/") == true)
                     NavigationBarItem(
-                        selected = currentRoute == dest.route,
+                        selected = currentRoute == dest.route || isChannelsTab,
                         onClick = {
                             if (currentRoute != dest.route) {
                                 navController.navigate(dest.route) {
-                                    popUpTo(Destination.Checkout.route) { saveState = true }
+                                    popUpTo(Destination.Channels.route) { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
@@ -173,10 +183,32 @@ private fun AppRoot() {
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = Destination.Checkout.route,
+            startDestination = Destination.Channels.route,
             modifier = Modifier.padding(padding)
         ) {
-            composable(Destination.Checkout.route) { CheckoutScreen() }
+            composable(Destination.Channels.route) {
+                ChannelsListScreen(
+                    onOpenChannel = { id ->
+                        // launchSingleTop + popUpTo(current, inclusive=false) :
+                        // si plusieurs créations en rafale déclenchent plusieurs
+                        // navigate(), on ne garde qu'une seule instance détail
+                        // en haut du backstack et on ne la rempile pas.
+                        navController.navigate(SubRoutes.channelDetail(id)) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+            composable(
+                route = SubRoutes.CHANNEL_DETAIL,
+                arguments = listOf(navArgument("id") { type = NavType.StringType })
+            ) { entry ->
+                val id = entry.arguments?.getString("id").orEmpty()
+                ChannelDetailScreen(
+                    channelId = id,
+                    onBack = { navController.popBackStack() },
+                )
+            }
             composable(Destination.Products.route) { ProductsScreen() }
             composable(Destination.Categories.route) { CategoriesScreen() }
             composable(Destination.Settings.route) { SettingsScreen() }

@@ -27,10 +27,11 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachMoney
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.ui.draw.rotate
@@ -40,7 +41,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
@@ -60,18 +60,29 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.belijolie.scanner.R
-import com.belijolie.scanner.cart.Channel
 import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
 
+/**
+ * Écran détail d'un canal : table des lignes du panier, totaux, boutons
+ * encaissement / export / impression. Dérivé de l'ancien CheckoutScreen
+ * (sans le dropdown de switch de canal, qui vit maintenant dans
+ * [ChannelsListScreen]).
+ *
+ * Au montage, on positionne [channelId] comme canal actif pour que les
+ * scans et toutes les mutations repo tapent le bon canal.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CheckoutScreen(
+fun ChannelDetailScreen(
+    channelId: String,
+    onBack: () -> Unit,
     vm: CheckoutViewModel = viewModel(factory = CheckoutViewModel.Factory())
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -81,6 +92,8 @@ fun CheckoutScreen(
     val exportResult by vm.exportResult.collectAsStateWithLifecycle()
     val isExporting by vm.isExporting.collectAsStateWithLifecycle()
 
+    LaunchedEffect(channelId) { vm.selectChannel(channelId) }
+
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(printResult) {
         printResult?.let {
@@ -88,9 +101,6 @@ fun CheckoutScreen(
             vm.clearPrintResult()
         }
     }
-    // Erreur d'export : on l'affiche dans un AlertDialog (message potentiellement
-    // long, ex. liste des catégories sans code Sage). Les succès restent en
-    // snackbar discret.
     var exportErrorDialog by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(exportResult) {
         exportResult?.let { r ->
@@ -116,48 +126,51 @@ fun CheckoutScreen(
     val activeChannel = state.channels.firstOrNull { it.id == state.activeChannelId }
     val categories by vm.categories.collectAsStateWithLifecycle()
 
-    var channelToRename by remember { mutableStateOf<Channel?>(null) }
-    var channelToClose by remember { mutableStateOf<Channel?>(null) }
     var showAddManual by remember { mutableStateOf(false) }
     var showPrintConfirm by remember { mutableStateOf(false) }
     var showCashPayment by remember { mutableStateOf(false) }
     var showExportFormat by remember { mutableStateOf(false) }
+    var showDiscountDialog by remember { mutableStateOf(false) }
     var lineToRemove by remember { mutableStateOf<com.belijolie.scanner.cart.CartLine?>(null) }
     var lineToEdit by remember { mutableStateOf<com.belijolie.scanner.cart.CartLine?>(null) }
+
+    val discount = activeChannel?.discountPercent ?: 0
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            // Block hardware key events (scanner's keyboard-wedge trailing chars)
-            // from activating any focused Button/Surface on this screen.
             .onPreviewKeyEvent { event ->
                 event.nativeKeyEvent.keyCode != android.view.KeyEvent.KEYCODE_BACK
             }
     ) {
 
-        ChannelDropdown(
-            channels = state.channels,
-            activeId = state.activeChannelId,
-            onSelect = vm::selectChannel,
-            onNew = vm::newChannel,
-            onRename = { channelToRename = it },
-            onClose = { ch ->
-                // Empty cart → close immediately. Non-empty → ask for confirmation.
-                if (ch.lines.isEmpty()) vm.closeChannel(ch.id)
-                else channelToClose = ch
-            }
-        )
-
         val scanMultiplier by vm.scanMultiplier.collectAsStateWithLifecycle()
         var showMultiplierDialog by remember { mutableStateOf(false) }
 
+        // Barre du haut : [← retour] [+ produit] [×1]
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 2.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = Color(0xFFE5E7EB),
+                modifier = Modifier
+                    .size(width = 44.dp, height = 34.dp)
+                    .clickable(onClick = onBack),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.channel_back),
+                        tint = Color(0xFF374151),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
             Button(
                 onClick = { showAddManual = true },
                 shape = RoundedCornerShape(6.dp),
@@ -169,9 +182,6 @@ fun CheckoutScreen(
                 Spacer(Modifier.width(4.dp))
                 Text(stringResource(R.string.checkout_add_product), color = Color.White, fontSize = 13.sp)
             }
-            // Mini carré "quantité par scan". Click → ouvre un AlertDialog
-            // avec clavier numérique pour éditer la valeur. Reset auto à 1
-            // après chaque scan côté VM.
             Box(
                 modifier = Modifier
                     .size(34.dp)
@@ -192,6 +202,38 @@ fun CheckoutScreen(
             }
         }
 
+        // Nom du canal + badge remise sous la barre d'actions
+        activeChannel?.let { ch ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    ch.name,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF374151),
+                    modifier = Modifier.weight(1f),
+                )
+                if (discount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFFDCFCE7), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            "-$discount%",
+                            color = Color(0xFF166534),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+        }
+
         if (showMultiplierDialog) {
             MultiplierDialog(
                 current = scanMultiplier,
@@ -203,9 +245,6 @@ fun CheckoutScreen(
             )
         }
 
-        // Mini bloc "dernier scan" — toujours au-dessus du header des colonnes.
-        // Click → dialog d'édition catégorie / quantité / prix. Un nouveau scan
-        // le remplace. Clear à l'impression ou au changement de canal.
         val lastScan by vm.lastScan.collectAsStateWithLifecycle()
         var showLastScanEdit by remember { mutableStateOf(false) }
         lastScan?.let { scan ->
@@ -223,7 +262,6 @@ fun CheckoutScreen(
             )
         }
 
-        // Compact column header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -236,8 +274,6 @@ fun CheckoutScreen(
             Spacer(Modifier.width(32.dp))
         }
 
-        // Zone panier : fond gris clair pour que les cartes blanches des lignes
-        // ressortent nettement. Padding horizontal 8dp pour aérer les côtés.
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -268,11 +304,6 @@ fun CheckoutScreen(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    // Clé composite : productId seul peut collisionner si une
-                    // ligne a été éditée (changement cat/prix) puis qu'on
-                    // rescan le produit original — les 2 lignes garderaient
-                    // le même productId. (categoryName + priceCents) complète
-                    // suffit car fusion déjà faite par Channel.addProduct.
                     items(sortedLines, key = { "${it.productId}_${it.categoryName}_${it.unitPriceCents}" }) { line ->
                         val bold = (categoryIndexByName[line.categoryName] ?: 0) % 2 == 1
                         Surface(
@@ -281,9 +312,6 @@ fun CheckoutScreen(
                             tonalElevation = 1.dp,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                // Click sur une ligne → dialog d'édition.
-                                // Les sous-composants (poubelle) ont leur
-                                // propre clickable qui consomme le tap.
                                 .clickable { lineToEdit = line }
                         ) {
                             Row(
@@ -304,16 +332,12 @@ fun CheckoutScreen(
                                     fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.SemiBold,
                                     fontSize = 14.sp
                                 )
-                                Text(
-                                    formatEuro(line.unitPriceCents * line.quantity),
+                                LineAmount(
+                                    rawCents = line.unitPriceCents * line.quantity,
+                                    discountPercent = discount,
+                                    bold = bold,
                                     modifier = Modifier.weight(1.2f),
-                                    fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.Bold,
-                                    fontSize = 14.sp
                                 )
-                                // Hitbox visible pour la poubelle : carré rouge
-                                // clair arrondi, plus facile à atteindre au doigt
-                                // sur un PDA et confirmation requise pour éviter
-                                // les suppressions accidentelles.
                                 Box(
                                     modifier = Modifier
                                         .size(36.dp)
@@ -335,16 +359,22 @@ fun CheckoutScreen(
             }
         }
 
-        val totalHtC = activeChannel?.totalCents ?: 0
+        val totalHtRaw = activeChannel?.totalCents ?: 0
+        val discountCents = if (discount <= 0) 0 else Math.round(totalHtRaw * discount / 100.0).toInt()
+        val totalHtC = totalHtRaw - discountCents
         val totalTvaC = Math.round(totalHtC * 0.20).toInt()
         val totalTtcC = totalHtC + totalTvaC
         val totalQtyC = activeChannel?.lines?.sumOf { it.quantity } ?: 0
 
         TotalBar(
             totalQty = totalQtyC,
+            totalHtRawCents = totalHtRaw,
             totalHtCents = totalHtC,
             totalTvaCents = totalTvaC,
             totalTtcCents = totalTtcC,
+            discountPercent = discount,
+            discountCents = discountCents,
+            onDiscount = { showDiscountDialog = true },
             canPrint = activeChannel != null && activeChannel.lines.isNotEmpty() && !isPrinting,
             isPrinting = isPrinting,
             onPrint = { showPrintConfirm = true },
@@ -387,48 +417,6 @@ fun CheckoutScreen(
         )
     }
 
-    channelToRename?.let { channel ->
-        var name by remember(channel.id) { mutableStateOf(channel.name) }
-        AlertDialog(
-            onDismissRequest = { channelToRename = null },
-            title = { Text(stringResource(R.string.channel_rename_title)) },
-            text = {
-                AppTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = stringResource(R.string.common_name),
-                    mode = KeyboardMode.TEXT
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.renameChannel(channel.id, name.ifBlank { channel.name })
-                    channelToRename = null
-                }) { Text(stringResource(R.string.common_ok)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { channelToRename = null }) { Text(stringResource(R.string.common_cancel)) }
-            }
-        )
-    }
-
-    channelToClose?.let { channel ->
-        AlertDialog(
-            onDismissRequest = { channelToClose = null },
-            title = { Text(stringResource(R.string.channel_close_title)) },
-            text = { Text(stringResource(R.string.channel_close_body, channel.name)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.closeChannel(channel.id)
-                    channelToClose = null
-                }) { Text(stringResource(R.string.common_close)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { channelToClose = null }) { Text(stringResource(R.string.common_cancel)) }
-            }
-        )
-    }
-
     lineToRemove?.let { line ->
         AlertDialog(
             onDismissRequest = { lineToRemove = null },
@@ -454,8 +442,17 @@ fun CheckoutScreen(
 
     if (showCashPayment) {
         CashPaymentSheet(
-            totalHtCents = activeChannel?.totalCents ?: 0,
-            onDismiss = { showCashPayment = false }
+            totalHtCents = activeChannel?.totalCentsAfterDiscount ?: 0,
+            channelName = activeChannel?.name.orEmpty(),
+            onDismiss = { showCashPayment = false },
+            onCloseChannel = {
+                val id = activeChannel?.id
+                showCashPayment = false
+                if (id != null) {
+                    vm.closeChannel(id)
+                    onBack()
+                }
+            }
         )
     }
 
@@ -479,6 +476,17 @@ fun CheckoutScreen(
         )
     }
 
+    if (showDiscountDialog && activeChannel != null) {
+        DiscountDialog(
+            current = discount,
+            onDismiss = { showDiscountDialog = false },
+            onConfirm = {
+                vm.setDiscount(it)
+                showDiscountDialog = false
+            }
+        )
+    }
+
     lineToEdit?.let { line ->
         EditCartLineDialog(
             line = line,
@@ -492,136 +500,54 @@ fun CheckoutScreen(
     }
 }
 
+/**
+ * Montant d'une ligne. Si une remise canal est active, affiche le prix brut
+ * barré (gris) suivi du prix remisé en vert. Sinon affiche juste le prix.
+ */
 @Composable
-private fun ChannelDropdown(
-    channels: List<Channel>,
-    activeId: String?,
-    onSelect: (String) -> Unit,
-    onNew: () -> Unit,
-    onRename: (Channel) -> Unit,
-    onClose: (Channel) -> Unit
+private fun LineAmount(
+    rawCents: Int,
+    discountPercent: Int,
+    bold: Boolean,
+    modifier: Modifier = Modifier,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val active = channels.firstOrNull { it.id == activeId }
-    val activeLabel = active?.name ?: "—"
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(modifier = Modifier.weight(1f)) {
-            Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = true }
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        activeLabel,
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text("▼", color = Color.White, fontSize = 12.sp)
-                }
-            }
-
-            androidx.compose.material3.DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
-                if (channels.isEmpty()) {
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { Text(stringResource(R.string.channel_none), color = Color.Gray) },
-                        onClick = { expanded = false }
-                    )
-                }
-                channels.forEach { ch ->
-                    val isActive = ch.id == activeId
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    ch.name,
-                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    "(${ch.lines.sumOf { it.quantity }})",
-                                    color = Color.Gray,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        },
-                        trailingIcon = {
-                            Row {
-                                IconButton(
-                                    onClick = {
-                                        expanded = false
-                                        onRename(ch)
-                                    },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Text("✎", fontSize = 14.sp)
-                                }
-                                IconButton(
-                                    onClick = {
-                                        // Keep the dropdown open so the user
-                                        // can close several canals in a row.
-                                        onClose(ch)
-                                    },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Close,
-                                        contentDescription = stringResource(R.string.common_close),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                        },
-                        onClick = {
-                            onSelect(ch.id)
-                            expanded = false
-                        }
-                    )
-                }
-            }
+    if (discountPercent > 0) {
+        val discounted = rawCents - Math.round(rawCents * discountPercent / 100.0).toInt()
+        Column(modifier = modifier) {
+            Text(
+                formatEuro(rawCents),
+                fontSize = 11.sp,
+                color = Color(0xFF9CA3AF),
+                textDecoration = TextDecoration.LineThrough,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                formatEuro(discounted),
+                fontSize = 14.sp,
+                color = Color(0xFF15803D),
+                fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.Bold,
+            )
         }
-
-        Spacer(Modifier.width(6.dp))
-
-        Surface(
-            shape = RoundedCornerShape(6.dp),
-            color = Color(0xFF16A34A),
-            modifier = Modifier.clickable(onClick = onNew)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(3.dp))
-                Text(stringResource(R.string.channel_new), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-            }
-        }
+    } else {
+        Text(
+            formatEuro(rawCents),
+            modifier = modifier,
+            fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.Bold,
+            fontSize = 14.sp,
+        )
     }
 }
 
 @Composable
 private fun TotalBar(
     totalQty: Int,
+    totalHtRawCents: Int,
     totalHtCents: Int,
     totalTvaCents: Int,
     totalTtcCents: Int,
+    discountPercent: Int,
+    discountCents: Int,
+    onDiscount: () -> Unit,
     canPrint: Boolean,
     isPrinting: Boolean,
     onPrint: () -> Unit,
@@ -631,9 +557,6 @@ private fun TotalBar(
     isExporting: Boolean,
     onExport: () -> Unit
 ) {
-    // Tiroir : par défaut déplié. Click sur le header (chevron) replie le
-    // détail (lignes HT / TVA / Qté) et les boutons, ne laissant visible
-    // que le total TTC compact. Animation expand/collapse 250ms.
     var expanded by remember { mutableStateOf(true) }
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
@@ -678,79 +601,136 @@ private fun TotalBar(
                 enter = expandVertically(animationSpec = tween(250)),
                 exit = shrinkVertically(animationSpec = tween(250)),
             ) { Column {
-            TotalRow(stringResource(R.string.checkout_total_quantity), "x$totalQty", bold = false, big = false)
-            TotalRow(stringResource(R.string.checkout_total_ht), formatEuro(totalHtCents), bold = false, big = false)
-            TotalRow(stringResource(R.string.checkout_total_vat), formatEuro(totalTvaCents), bold = false, big = false)
-            Spacer(Modifier.height(6.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Button(
-                    onClick = onCashPayment,
-                    enabled = canCash,
-                    modifier = Modifier.weight(1f).height(36.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(0.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
-                ) {
-                    Icon(
-                        Icons.Default.AttachMoney,
-                        contentDescription = stringResource(R.string.checkout_action_cash),
-                        modifier = Modifier.size(20.dp)
+                TotalRow(stringResource(R.string.checkout_total_quantity), "x$totalQty", bold = false, big = false)
+                if (discountPercent > 0) {
+                    TotalRow(
+                        label = stringResource(R.string.checkout_total_ht),
+                        value = formatEuro(totalHtRawCents),
+                        bold = false,
+                        big = false,
+                        strike = true,
+                        color = Color(0xFF9CA3AF),
                     )
+                    TotalRow(
+                        label = stringResource(R.string.discount_line_label, discountPercent),
+                        value = "-" + formatEuro(discountCents),
+                        bold = true,
+                        big = false,
+                        color = Color(0xFF15803D),
+                    )
+                    TotalRow(
+                        label = stringResource(R.string.checkout_total_ht),
+                        value = formatEuro(totalHtCents),
+                        bold = true,
+                        big = false,
+                        color = Color(0xFF15803D),
+                    )
+                } else {
+                    TotalRow(stringResource(R.string.checkout_total_ht), formatEuro(totalHtCents), bold = false, big = false)
                 }
-                Button(
-                    onClick = onExport,
-                    enabled = canExport,
-                    modifier = Modifier.weight(1f).height(36.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(0.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                TotalRow(stringResource(R.string.checkout_total_vat), formatEuro(totalTvaCents), bold = false, big = false)
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    if (isExporting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
+                    Button(
+                        onClick = onCashPayment,
+                        enabled = canCash,
+                        modifier = Modifier.weight(1f).height(36.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(0.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+                    ) {
                         Icon(
-                            Icons.Default.Upload,
-                            contentDescription = stringResource(R.string.checkout_action_export),
+                            Icons.Default.AttachMoney,
+                            contentDescription = stringResource(R.string.checkout_action_cash),
                             modifier = Modifier.size(20.dp)
                         )
                     }
-                }
-                Button(
-                    onClick = onPrint,
-                    enabled = canPrint,
-                    modifier = Modifier.weight(1f).height(36.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    if (isPrinting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
+                    // Bouton remise. Vert clair si active, violet neutre sinon.
+                    Button(
+                        onClick = onDiscount,
+                        modifier = Modifier.weight(1f).height(36.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(0.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (discountPercent > 0) Color(0xFF15803D) else Color(0xFF7C3AED)
                         )
-                    } else {
+                    ) {
                         Icon(
-                            Icons.Default.Print,
-                            contentDescription = stringResource(R.string.checkout_action_print),
-                            modifier = Modifier.size(20.dp)
+                            Icons.Default.Percent,
+                            contentDescription = stringResource(R.string.discount_button),
+                            modifier = Modifier.size(18.dp)
                         )
+                        if (discountPercent > 0) {
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "$discountPercent",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = onExport,
+                        enabled = canExport,
+                        modifier = Modifier.weight(1f).height(36.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(0.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                    ) {
+                        if (isExporting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.Upload,
+                                contentDescription = stringResource(R.string.checkout_action_export),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = onPrint,
+                        enabled = canPrint,
+                        modifier = Modifier.weight(1f).height(36.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        if (isPrinting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.Print,
+                                contentDescription = stringResource(R.string.checkout_action_print),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
-            }
-            } }  // fin Column inner + AnimatedVisibility
-        }      // fin Column racine Surface
-    }          // fin Surface
-}              // fin TotalBar
+            } }
+        }
+    }
+}
 
 @Composable
-private fun TotalRow(label: String, value: String, bold: Boolean, big: Boolean) {
+private fun TotalRow(
+    label: String,
+    value: String,
+    bold: Boolean,
+    big: Boolean,
+    strike: Boolean = false,
+    color: Color = Color.Unspecified,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -759,12 +739,16 @@ private fun TotalRow(label: String, value: String, bold: Boolean, big: Boolean) 
         Text(
             label,
             fontSize = if (big) 16.sp else 13.sp,
-            fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium
+            fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium,
+            color = color,
+            textDecoration = if (strike) TextDecoration.LineThrough else TextDecoration.None,
         )
         Text(
             value,
             fontSize = if (big) 20.sp else 14.sp,
-            fontWeight = if (bold) FontWeight.Bold else FontWeight.SemiBold
+            fontWeight = if (bold) FontWeight.Bold else FontWeight.SemiBold,
+            color = color,
+            textDecoration = if (strike) TextDecoration.LineThrough else TextDecoration.None,
         )
     }
 }
@@ -776,9 +760,7 @@ internal fun formatEuro(cents: Int): String {
 }
 
 /**
- * Dialog d'édition d'une ligne existante du panier. Même structure que
- * [EditLastScanDialog] mais sans hint "annule le dernier scan" (ici
- * l'édition est en-place, sans fusion/décalage).
+ * Dialog d'édition d'une ligne existante du panier.
  */
 @Composable
 private fun EditCartLineDialog(
@@ -864,11 +846,6 @@ private fun EditCartLineDialog(
     )
 }
 
-/**
- * Mini bande affichant le dernier produit scanné (catégorie / quantité / prix
- * unitaire). Click → ouvre [EditLastScanDialog] pour corriger. Un nouveau
- * scan remplace cette bande. Clear à l'impression ou au changement de canal.
- */
 @Composable
 private fun LastScanBlock(
     scan: LastScan,
@@ -921,11 +898,6 @@ private fun LastScanBlock(
     }
 }
 
-/**
- * Dialog d'édition du dernier scan. Champs catégorie (dropdown), quantité,
- * prix. Confirmer → VM annule l'ancien ajout et rejoue avec les nouvelles
- * valeurs.
- */
 @Composable
 private fun EditLastScanDialog(
     scan: LastScan,
@@ -950,9 +922,6 @@ private fun EditLastScanDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.checkout_last_scan_edit)) },
         text = {
-            // verticalScroll pour que le hint + 3 champs tiennent dans la
-            // zone content de l'AlertDialog (sinon le dernier champ est
-            // écrasé/aplati car Material3 impose une hauteur max).
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.verticalScroll(rememberScrollState())
@@ -1018,10 +987,6 @@ private fun EditLastScanDialog(
     )
 }
 
-/**
- * Dialog d'édition du multiplicateur de quantité par scan. Clavier NUMBER
- * pour saisie rapide, OK désactivé si le champ est vide.
- */
 @Composable
 private fun MultiplierDialog(
     current: Int,
@@ -1047,6 +1012,51 @@ private fun MultiplierDialog(
                     stringResource(R.string.checkout_qty_mult_hint),
                     fontSize = 12.sp,
                     color = Color.Gray
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = parsed != null,
+                onClick = { parsed?.let { onConfirm(it) } }
+            ) { Text(stringResource(R.string.common_ok)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+        }
+    )
+}
+
+/**
+ * Dialog de saisie d'une remise en pourcentage (0-100). La remise ne touche
+ * que l'affichage caisse et le ticket imprimé — l'export CSV / JSON / Sage
+ * reste au prix brut (décision produit).
+ */
+@Composable
+private fun DiscountDialog(
+    current: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit,
+) {
+    var text by remember { mutableStateOf(if (current == 0) "" else current.toString()) }
+    val parsed = text.toIntOrNull()?.coerceIn(0, 100)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.discount_dialog_title)) },
+        text = {
+            Column {
+                AppTextField(
+                    value = text,
+                    onValueChange = { text = it.filter { c -> c.isDigit() }.take(3) },
+                    label = stringResource(R.string.discount_percent_label),
+                    mode = KeyboardMode.NUMBER,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.discount_dialog_hint),
+                    fontSize = 12.sp,
+                    color = Color.Gray,
                 )
             }
         },

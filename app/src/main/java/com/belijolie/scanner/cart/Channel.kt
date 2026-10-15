@@ -26,9 +26,21 @@ data class CartLine(
 data class Channel(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
-    val lines: List<CartLine> = emptyList()
+    val lines: List<CartLine> = emptyList(),
+    // Remise en pourcentage (0-100). Ne concerne QUE l'affichage caisse et le
+    // ticket imprimé. L'export CSV / JSON / Sage reste sur les prix bruts
+    // (décision produit : la remise est une faveur à la caisse, pas une
+    // réalité comptable). Défaut 0 → compat sérialisation canaux existants.
+    val discountPercent: Int = 0
 ) {
     val totalCents: Int get() = lines.sumOf { it.unitPriceCents * it.quantity }
+
+    /** Montant économisé par la remise (en centimes). */
+    val discountCents: Int get() =
+        if (discountPercent <= 0) 0 else Math.round(totalCents * discountPercent / 100.0).toInt()
+
+    /** Total HT après remise. Égal à [totalCents] si [discountPercent] = 0. */
+    val totalCentsAfterDiscount: Int get() = totalCents - discountCents
 
     /**
      * Merge lines when the (category, unit price) pair is the same — regardless
@@ -146,6 +158,8 @@ data class Channel(
     }
 
     fun rename(newName: String): Channel = copy(name = newName)
+
+    fun setDiscount(percent: Int): Channel = copy(discountPercent = percent.coerceIn(0, 100))
 }
 
 @Serializable

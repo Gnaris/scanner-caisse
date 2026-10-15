@@ -49,8 +49,31 @@ if ($existingTag) {
     exit 1
 }
 
-# 2. Push code
-Write-Host "[1/4] Push du code sur origin/main..." -ForegroundColor Yellow
+# 2. Bump version.properties pour que les builds locaux ulterieurs
+#    (Android Studio Run, assembleDebug sans -P) embarquent la bonne version
+#    et ne declenchent pas de "MAJ dispo" alors qu'on vient de l'installer.
+Write-Host "[1/4] Bump version.properties -> $Version..." -ForegroundColor Yellow
+$versionPropsPath = "version.properties"
+$versionPropsContent = @"
+# Version embarquee par defaut dans l'APK quand Gradle est invoque SANS -P
+# (ex. Android Studio Run, gradlew assembleDebug a la main). Doit refleter
+# la derniere release publiee pour que l'updater ne propose pas une MAJ qu'on
+# vient d'installer. release-local.ps1 met ce fichier a jour automatiquement
+# et le commit avant chaque release. En CI, versionName/versionCode viennent
+# du tag pousse (app-vX.Y.Z : ces lignes sont ecrasees par -P).
+versionName=$Version
+versionCode=$VersionCode
+"@
+Set-Content -Path $versionPropsPath -Value $versionPropsContent -Encoding utf8
+
+$diff = git status --porcelain $versionPropsPath
+if ($diff) {
+    git add $versionPropsPath
+    git commit -m "chore(release): bump version.properties to $Version"
+    if ($LASTEXITCODE -ne 0) { exit 1 }
+}
+
+Write-Host "    Push du code sur origin/main..." -ForegroundColor Yellow
 git push origin main
 if ($LASTEXITCODE -ne 0) { exit 1 }
 

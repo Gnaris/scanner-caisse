@@ -35,8 +35,15 @@ cart/
                          CartLine porte 3 snapshots pour l'impression EN et
                          l'export Sage : categoryNameEn, nameEn, sageArticleCode
                          (tous nullable, défauts null → compat sérialisation).
+                         Channel porte discountPercent (0-100, défaut 0) :
+                         remise de caisse appliquée uniquement sur l'écran et
+                         le ticket imprimé — l'export reste sur les prix bruts.
+                         Helpers discountCents + totalCentsAfterDiscount.
   ChannelsRepository.kt  Persistance DataStore des canaux (survit au reboot).
                          addProductToActive propage les 3 snapshots EN/Sage.
+                         setActive accepte String? ; clearActive() annule le
+                         canal courant (utilisé à l'entrée de la liste).
+                         setDiscountInActive(percent) pour la remise.
 data/
   AppDatabase.kt         Room DB "scanner.db" (v5, fallbackToDestructiveMigration)
   SettingsStore.kt       AppSettings + DataStore. Champs scannerAction / scannerExtra
@@ -108,7 +115,12 @@ update/
                          Rendu dans MainActivity.AppRoot via collectAsState.
 ui/
   Nav.kt                 Destinations (labelRes: @StringRes au lieu de String
-                         → labels bilingues depuis strings.xml)
+                         → labels bilingues depuis strings.xml). L'onglet
+                         principal est "Channels" (route "channels") qui
+                         remplace l'ancien "Checkout". SubRoutes.CHANNEL_DETAIL
+                         ("channel/{id}") pour le détail d'un canal — pas
+                         listé dans la bottom bar mais l'onglet Channels reste
+                         surligné quand on y est.
   theme/                 Theme + Color (indigo/surface clair)
   keyboard/
     AppKeyboard.kt       Clavier maison (NUMBER, DECIMAL, IP, TEXT, SYMBOLS)
@@ -125,15 +137,31 @@ ui/
                          50ms/tick, via rememberUpdatedState pour éviter stale
                          closures).
   checkout/
-    CheckoutScreen.kt    Dropdown canaux + bouton "+ produit" + table + totaux +
-                         3 boutons icône-only côte à côte : Encaissement (vert),
-                         Export (bleu), Imprimer (violet). Panier à fond gris
-                         clair (0xFFF3F4F6), chaque ligne dans une Surface
-                         blanche arrondie 8dp (tonalElevation 1.dp), spacedBy 5dp.
-                         Bouton poubelle = Box 36dp fond 0xFFFEE2E2 (hitbox
-                         visible) → ouvre AlertDialog de confirmation avant
-                         suppression. Headers de colonnes empilés sur 2 lignes
-                         (FR\n中文) pour tenir dans la largeur.
+    ChannelsListScreen.kt  Nouvel écran "liste des canaux" = point d'entrée
+                         de l'onglet Canal. Header : gros bouton vert
+                         "Créer un canal" (crée + navigue vers détail en une
+                         action). En dessous : liste verticale de cartes
+                         (nom + nb articles + total TTC + crayon renommer +
+                         croix fermer + chevron). Clic sur carte → détail
+                         (route "channel/{id}"). Au montage, clearActiveChannel()
+                         pour que les scans ne tapent plus aucun canal tant
+                         qu'on n'ouvre pas un détail.
+    CheckoutScreen.kt    Écran détail d'un canal (fonction ChannelDetailScreen
+                         avec channelId + onBack). PLUS de dropdown de switch
+                         de canal. Barre du haut : [← retour] + [+ Ajouter
+                         produit] + mini carré "×N" côte à côte sur une seule
+                         ligne. Sous la barre : nom du canal + badge remise
+                         si active (-X% vert). 4 boutons icône-only côte à côte
+                         en bas : Encaissement (vert), Remise (violet / vert
+                         si active avec % affiché), Export (bleu), Imprimer
+                         (indigo). Panier à fond gris clair (0xFFF3F4F6),
+                         chaque ligne dans une Surface blanche arrondie 8dp.
+                         Si discountPercent > 0 : prix de ligne affiché barré
+                         (gris) + prix remisé (vert) ; totaux récap avec ligne
+                         HT barré + ligne "Remise -X%" verte + "Total HT" vert
+                         remisé. Headers colonnes empilés 2 lignes (FR\n中文).
+                         LaunchedEffect(channelId) → selectChannel. Si le canal
+                         est supprimé pendant qu'on l'affiche → onBack auto.
     ExportFormatPickerDialog.kt  Dialog custom avec 3 cartes côte à côte (Excel
                          vert, JSON orange, Sage 50 bleu), icône + label +
                          sous-texte, Annuler discret en bas.
@@ -150,6 +178,9 @@ ui/
     UnknownProductSheet.kt     Modal scan inconnu (créer OU choisir).
     CashPaymentSheet.kt        Modal encaissement : Total HT + input "Montant reçu"
                                + reste à régler / à rendre / soldé en direct.
+                               Bouton rouge "Clôturer le canal" en bas (avec
+                               AlertDialog de confirmation nommant le canal) qui
+                               supprime le canal définitivement sans encaisser.
   products/              Liste produits + modal création (décode prix depuis
                          code-barres via decodePriceFromBarcode).
   categories/            Liste + add + edit + delete. CategoryEditDialog avec
@@ -274,6 +305,18 @@ keystore sinon Android refuse l'install (vu comme une app différente).
 
 - `app/belijolie-release.jks` — keystore RSA 2048, validité 10000 jours
 - `keystore.properties` — mots de passe / alias (lus par `app/build.gradle.kts`)
+
+### Fichier `version.properties` (committed)
+
+Reflète la dernière version publiée (versionName + versionCode). Lu par
+`app/build.gradle.kts` comme fallback quand Gradle est lancé **sans `-P`**
+(= Android Studio ▶ Run, `gradlew assembleDebug` à la main). Objectif : un
+build local embarque la même version que la Release GitHub la plus récente,
+donc l'updater ne propose pas une MAJ qu'on vient d'installer.
+
+`release-local.ps1` met ce fichier à jour automatiquement avant chaque
+release et commit le bump. En CI, le workflow passe `-PversionName`/
+`-PversionCode` depuis le tag → ces lignes du fichier sont écrasées.
 
 **Backup obligatoire** du keystore + mot de passe sur 2 supports distincts
 (clé USB + cloud chiffré). Perdu = plus jamais de MAJ possible sur les PDA
@@ -497,6 +540,18 @@ PyInstaller). Logs dans `%APPDATA%\ScannerListener\listener.log`.
 - `dismissOnClickOutside = false` sur le modal "produit inconnu" + garde dans
   `handleScan` pour ignorer les scans quand le modal est déjà ouvert → résolu le bug
   "ouvre et ferme aussitôt" causé par des touches parasites du wedge.
+- **`handleScan` n'auto-crée plus de canal** : si `activeChannelId == null`
+  (= on est sur la liste des canaux, pas dans un détail) le scan est ignoré.
+  Volontaire : l'utilisateur passe forcément par la liste → "Créer un canal"
+  → détail. Un scan hors contexte ne doit alimenter aucun panier.
+- **Remise de canal uniquement affichage + ticket** : `Channel.discountPercent`
+  (0-100) touche l'écran de caisse (prix barrés + ligne "Remise -X%" verte)
+  et le ticket imprimé (3 lignes totaux : HT brut, remise, HT remisé en gras ;
+  TVA et TTC recalculés sur HT remisé). L'export CSV / JSON / Sage reste au
+  prix brut (décision produit : la remise est une faveur à la caisse, pas une
+  réalité comptable). Modifiable via le bouton "%" dans la TotalBar (dialog
+  NUMBER 0-100). Le bouton passe en vert et affiche le % quand une remise est
+  active ; sinon violet neutre.
 - **Export Sage 50** : encodage Windows-1252 (pas UTF-8 avec BOM comme le CSV
   normal), description RTF single-line (`\line` + `\'xx` pour les accents).
   Les codes articles sont désormais **saisis par l'utilisateur sur chaque

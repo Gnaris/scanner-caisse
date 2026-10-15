@@ -11,13 +11,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,15 +44,20 @@ import com.belijolie.scanner.ui.keyboard.KeyboardMode
 /**
  * Modal d'encaissement : affiche le total HT, laisse saisir le montant reçu,
  * et calcule en direct le reste à régler (ou le rendu si on dépasse).
+ * Un bouton « Clôturer le canal » (avec confirmation) permet de supprimer
+ * le canal définitivement sans faire d'encaissement.
  */
 @Composable
 fun CashPaymentSheet(
     totalHtCents: Int,
-    onDismiss: () -> Unit
+    channelName: String = "",
+    onDismiss: () -> Unit,
+    onCloseChannel: (() -> Unit)? = null,
 ) {
     var receivedText by remember { mutableStateOf("") }
     val receivedCents = parseAmountCents(receivedText)
     val diffCents = (receivedCents ?: 0) - totalHtCents
+    var showCloseConfirm by remember { mutableStateOf(false) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -111,9 +121,59 @@ fun CashPaymentSheet(
                     valueColor = resteColor,
                     big = true
                 )
+                if (onCloseChannel != null) {
+                    Spacer(Modifier.height(14.dp))
+                    Button(
+                        onClick = { showCloseConfirm = true },
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB91C1C)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        androidx.compose.foundation.layout.Spacer(Modifier.size(6.dp))
+                        Text(
+                            stringResource(R.string.cash_close_channel),
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp,
+                        )
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
             }
         }
+    }
+
+    if (showCloseConfirm && onCloseChannel != null) {
+        AlertDialog(
+            onDismissRequest = { showCloseConfirm = false },
+            title = { Text(stringResource(R.string.cash_close_confirm_title)) },
+            text = { Text(stringResource(R.string.cash_close_confirm_body, channelName)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showCloseConfirm = false
+                    onCloseChannel()
+                }) {
+                    Text(
+                        stringResource(R.string.common_close),
+                        color = Color(0xFFB91C1C),
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCloseConfirm = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            }
+        )
     }
 }
 

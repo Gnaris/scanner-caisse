@@ -15,7 +15,7 @@
     <string name="common_name">Nom / 名称</string>
 
     <!-- Navigation (sur 2 lignes pour tenir dans la bottom bar) -->
-    <string name="nav_checkout">Caisse\n收银</string>
+    <string name="nav_channels">Canal\n购物车</string>
     <string name="nav_products">Produits\n商品</string>
     <string name="nav_categories">Catégories\n类别</string>
     <string name="nav_settings">Paramètres\n设置</string>
@@ -43,10 +43,26 @@
 
     <!-- Canaux (paniers parallèles) -->
     <string name="channel_new">Canal / 购物车</string>
+    <string name="channel_create">Créer un canal / 新建购物车</string>
+    <string name="channel_list_empty">Aucun canal pour l\'instant.\nAppuie sur « Créer un canal » pour commencer. / 还没有购物车。\n点击「新建购物车」开始。</string>
+    <string name="channel_items_count">%1$d articles / %1$d 件商品</string>
     <string name="channel_none">Aucun canal — crée-en un → / 没有购物车——请新建 →</string>
     <string name="channel_rename_title">Renommer le canal / 重命名购物车</string>
     <string name="channel_close_title">Fermer ce canal ? / 关闭此购物车？</string>
     <string name="channel_close_body">Le panier \"%1$s\" sera perdu. / 购物车 \"%1$s\" 将被删除。</string>
+    <string name="channel_back">Retour / 返回</string>
+
+    <!-- Remise -->
+    <string name="discount_button">Remise / 折扣</string>
+    <string name="discount_dialog_title">Remise sur le canal / 整单折扣</string>
+    <string name="discount_dialog_hint">Pourcentage appliqué uniquement sur le ticket imprimé. L\'export reste au prix brut. / 仅适用于打印小票。导出保持原价。</string>
+    <string name="discount_percent_label">Pourcentage (0-100) / 百分比(0-100)</string>
+    <string name="discount_line_label">Remise -%1$d%% / 折扣 -%1$d%%</string>
+
+    <!-- Clôture canal depuis l'encaissement -->
+    <string name="cash_close_channel">Clôturer le canal / 关闭购物车</string>
+    <string name="cash_close_confirm_title">Clôturer sans encaisser ? / 不收款直接关闭？</string>
+    <string name="cash_close_confirm_body">Le canal « %1$s » sera supprimé définitivement. / 购物车「%1$s」将被永久删除。</string>
 
     <!-- Produit manuel (modal) -->
     <string name="manual_sheet_title">Ajouter un produit / 添加商品</string>
