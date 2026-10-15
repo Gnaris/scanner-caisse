@@ -26,3 +26,6 @@ keystore.properties
 
 # État local de l'outil Claude Code (lock de tâches planifiées, etc.)
 .claude/
+
+# VS Code (préférences IDE locales)
+.vscode/
