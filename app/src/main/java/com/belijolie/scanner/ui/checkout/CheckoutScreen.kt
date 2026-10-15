@@ -268,10 +268,11 @@ fun ChannelDetailScreen(
                 .padding(horizontal = 10.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(stringResource(R.string.checkout_header_category), modifier = Modifier.weight(2.5f), fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold, lineHeight = 11.sp, maxLines = 2)
-            Text(stringResource(R.string.checkout_header_qty), modifier = Modifier.weight(0.8f), fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold, lineHeight = 11.sp, maxLines = 2)
-            Text(stringResource(R.string.checkout_header_total_ht), modifier = Modifier.weight(1.2f), fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold, lineHeight = 11.sp, maxLines = 2)
-            Spacer(Modifier.width(32.dp))
+            Text(stringResource(R.string.checkout_header_category), modifier = Modifier.weight(2.2f), fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold, lineHeight = 11.sp, maxLines = 2)
+            Text(stringResource(R.string.checkout_header_qty), modifier = Modifier.weight(0.6f), fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold, lineHeight = 11.sp, maxLines = 2)
+            Text(stringResource(R.string.checkout_header_unit_price), modifier = Modifier.weight(1.0f), fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold, lineHeight = 11.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.End)
+            Text(stringResource(R.string.checkout_header_total_ht), modifier = Modifier.weight(1.2f), fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold, lineHeight = 11.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.End)
+            Spacer(Modifier.width(42.dp))
         }
 
         Box(
@@ -322,15 +323,26 @@ fun ChannelDetailScreen(
                             ) {
                                 Text(
                                     line.categoryName,
-                                    modifier = Modifier.weight(2.5f),
+                                    modifier = Modifier.weight(2.2f),
                                     fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.SemiBold,
                                     fontSize = 14.sp
                                 )
                                 Text(
                                     "x${line.quantity}",
-                                    modifier = Modifier.weight(0.8f),
+                                    modifier = Modifier.weight(0.6f),
                                     fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.SemiBold,
                                     fontSize = 14.sp
+                                )
+                                // P.U. : prix unitaire brut, PAS impacté par la
+                                // remise (la remise porte sur le total ligne,
+                                // afficher un P.U. remisé serait trompeur sur
+                                // le prix réel de l'article).
+                                Text(
+                                    formatEuro(line.unitPriceCents),
+                                    modifier = Modifier.weight(1.0f),
+                                    fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                    fontSize = 13.sp,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.End,
                                 )
                                 LineAmount(
                                     rawCents = line.unitPriceCents * line.quantity,
@@ -338,6 +350,7 @@ fun ChannelDetailScreen(
                                     bold = bold,
                                     modifier = Modifier.weight(1.2f),
                                 )
+                                Spacer(Modifier.width(4.dp))
                                 Box(
                                     modifier = Modifier
                                         .size(36.dp)
@@ -411,9 +424,6 @@ fun ChannelDetailScreen(
                 vm.createAndAddToCart(barcode, categoryId, cents)
             },
             onPick = { productId -> vm.addExistingToCart(productId) },
-            onCreateCategory = { name, nameEn, sage, onCreated ->
-                vm.createCategory(name, nameEn, sage, onCreated)
-            }
         )
     }
 
@@ -513,7 +523,10 @@ private fun LineAmount(
 ) {
     if (discountPercent > 0) {
         val discounted = rawCents - Math.round(rawCents * discountPercent / 100.0).toInt()
-        Column(modifier = modifier) {
+        Column(
+            modifier = modifier,
+            horizontalAlignment = Alignment.End,
+        ) {
             Text(
                 formatEuro(rawCents),
                 fontSize = 11.sp,
@@ -534,6 +547,7 @@ private fun LineAmount(
             modifier = modifier,
             fontWeight = if (bold) FontWeight.ExtraBold else FontWeight.Bold,
             fontSize = 14.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
         )
     }
 }

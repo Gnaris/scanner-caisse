@@ -55,8 +55,6 @@ import com.belijolie.scanner.data.entity.ProductWithCategory
 import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
 import com.belijolie.scanner.ui.products.decodePriceFromBarcode
-import com.belijolie.scanner.util.CategoryTranslator
-import com.belijolie.scanner.util.suggestNextSageCode
 
 private enum class View { CREATE, PICK }
 
@@ -68,7 +66,6 @@ fun UnknownProductSheet(
     onDismiss: () -> Unit,
     onCreate: (barcode: String, categoryId: Long, priceCents: Int) -> Unit,
     onPick: (productId: Long) -> Unit,
-    onCreateCategory: (name: String, nameEn: String?, sage: String?, onCreated: (Long) -> Unit) -> Unit
 ) {
     var view by remember { mutableStateOf(View.CREATE) }
 
@@ -136,7 +133,6 @@ fun UnknownProductSheet(
                         barcode = barcode,
                         categories = categories,
                         onConfirm = { catId, cents -> onCreate(barcode, catId, cents) },
-                        onCreateCategory = onCreateCategory
                     )
                     if (existingProducts.isNotEmpty()) {
                         Spacer(Modifier.height(12.dp))
@@ -181,7 +177,6 @@ private fun CreateForm(
     barcode: String,
     categories: List<Category>,
     onConfirm: (categoryId: Long, priceCents: Int) -> Unit,
-    onCreateCategory: (name: String, nameEn: String?, sage: String?, onCreated: (Long) -> Unit) -> Unit
 ) {
     // Pré-sélection par préfixe : si une catégorie a un `barcodePrefix` qui
     // matche le début du code-barres scanné, on la choisit par défaut. Sinon
@@ -197,111 +192,13 @@ private fun CreateForm(
     var priceText by remember(barcode) {
         mutableStateOf(autoCents?.let { "%d.%02d".format(it / 100, it % 100) } ?: "")
     }
-    var creatingCategory by remember { mutableStateOf(false) }
-    var newCategoryName by remember { mutableStateOf("") }
-    var newCategoryNameEn by remember { mutableStateOf("") }
-    // Mémorise la dernière suggestion EN pour ne pas écraser une saisie manuelle
-    // (même pattern que CategoryEditDialog dans l'écran Catégories).
-    var lastEnSuggestion by remember { mutableStateOf("") }
-    // Suggestion Sage recalculée à chaque ouverture de la mini-form : prend le
-    // snapshot `categories` courant et retourne le prochain ART000X libre.
-    var newCategorySage by remember(creatingCategory, categories.size) {
-        mutableStateOf(if (creatingCategory) suggestNextSageCode(categories) else "")
-    }
 
     Column {
         CategoryDropdown(
             categories = categories,
             selectedId = categoryId,
             onSelected = { categoryId = it },
-            onCreateCategoryClick = { creatingCategory = true }
         )
-
-        if (creatingCategory) {
-            Spacer(Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFFE0E7FF), RoundedCornerShape(8.dp))
-                    .padding(12.dp)
-            ) {
-                Column {
-                    Text(
-                        stringResource(R.string.unknown_new_category),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF1E3A8A)
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    AppTextField(
-                        value = newCategoryName,
-                        onValueChange = { v ->
-                            newCategoryName = v
-                            // Suggère une traduction EN tant que l'utilisateur
-                            // n'a pas tapé son propre nameEn (ou qu'il contient
-                            // encore notre précédente suggestion).
-                            val suggestion = CategoryTranslator.suggestEnglishName(v).orEmpty()
-                            if (newCategoryNameEn.isBlank() || newCategoryNameEn == lastEnSuggestion) {
-                                newCategoryNameEn = suggestion
-                                lastEnSuggestion = suggestion
-                            }
-                        },
-                        label = stringResource(R.string.unknown_category_name_label),
-                        mode = KeyboardMode.TEXT
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    AppTextField(
-                        value = newCategoryNameEn,
-                        onValueChange = { newCategoryNameEn = it },
-                        label = stringResource(R.string.category_name_en),
-                        mode = KeyboardMode.TEXT
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    AppTextField(
-                        value = newCategorySage,
-                        onValueChange = { newCategorySage = it },
-                        label = stringResource(R.string.category_sage_code),
-                        mode = KeyboardMode.TEXT
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(
-                            onClick = {
-                                creatingCategory = false
-                                newCategoryName = ""
-                                newCategoryNameEn = ""
-                                newCategorySage = ""
-                                lastEnSuggestion = ""
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) { Text(stringResource(R.string.common_cancel)) }
-                        Button(
-                            onClick = {
-                                val name = newCategoryName.trim()
-                                if (name.isNotEmpty()) {
-                                    onCreateCategory(
-                                        name,
-                                        newCategoryNameEn.trim().takeIf { it.isNotEmpty() },
-                                        newCategorySage.trim().takeIf { it.isNotEmpty() }
-                                    ) { newId ->
-                                        categoryId = newId
-                                    }
-                                    creatingCategory = false
-                                    newCategoryName = ""
-                                    newCategoryNameEn = ""
-                                    newCategorySage = ""
-                                    lastEnSuggestion = ""
-                                }
-                            },
-                            enabled = newCategoryName.isNotBlank(),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A8A)),
-                            modifier = Modifier.weight(1f)
-                        ) { Text(stringResource(R.string.unknown_create_short), color = Color.White) }
-                    }
-                }
-            }
-        }
 
         Spacer(Modifier.height(12.dp))
 
@@ -336,7 +233,6 @@ private fun CategoryDropdown(
     categories: List<Category>,
     selectedId: Long,
     onSelected: (Long) -> Unit,
-    onCreateCategoryClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val fallbackLabel = if (categories.isEmpty())
@@ -364,28 +260,6 @@ private fun CategoryDropdown(
                     onClick = { onSelected(c.id); expanded = false }
                 )
             }
-            if (categories.isNotEmpty()) HorizontalDivider()
-            DropdownMenuItem(
-                text = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = null,
-                            tint = Color(0xFF4F46E5)
-                        )
-                        Spacer(Modifier.padding(start = 6.dp))
-                        Text(
-                            stringResource(R.string.unknown_new_category),
-                            color = Color(0xFF4F46E5),
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                },
-                onClick = {
-                    expanded = false
-                    onCreateCategoryClick()
-                }
-            )
         }
     }
 }

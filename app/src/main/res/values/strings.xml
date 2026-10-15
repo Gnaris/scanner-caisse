@@ -25,6 +25,7 @@
     <!-- Headers de colonnes : empilés sur 2 lignes pour tenir dans la largeur -->
     <string name="checkout_header_category">Catégorie\n类别</string>
     <string name="checkout_header_qty">Qté\n数量</string>
+    <string name="checkout_header_unit_price">P.U.\n单价</string>
     <string name="checkout_header_total_ht">Total HT\n税前</string>
     <string name="checkout_empty_hint">Scanne un produit avec le bouton latéral.\n使用侧键扫描商品。</string>
     <string name="checkout_remove_line">Retirer / 移除</string>
