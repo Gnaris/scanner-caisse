@@ -13,8 +13,17 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ProductDao {
 
+    // Tri UI : d'abord par nom de catégorie (alphabétique, insensible à la
+    // casse), puis par prix croissant à l'intérieur d'une catégorie. Le JOIN
+    // explicite sur categories est nécessaire parce que @Relation fait une
+    // 2e requête, donc ORDER BY ne peut pas référencer category.name sans
+    // ce JOIN.
     @Transaction
-    @Query("SELECT * FROM products ORDER BY barcode")
+    @Query("""
+        SELECT products.* FROM products
+        INNER JOIN categories ON categories.id = products.categoryId
+        ORDER BY categories.name COLLATE NOCASE ASC, products.priceCents ASC
+    """)
     fun observeAllWithCategory(): Flow<List<ProductWithCategory>>
 
     @Transaction
