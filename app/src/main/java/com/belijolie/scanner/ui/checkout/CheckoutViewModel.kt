@@ -18,6 +18,7 @@ import com.belijolie.scanner.export.ChannelExporter
 import com.belijolie.scanner.export.ExportFormat
 import com.belijolie.scanner.printer.EscPosPrinter
 import com.belijolie.scanner.printer.TicketLang
+import com.belijolie.scanner.scanner.ScanDedupe
 import com.belijolie.scanner.scanner.ScanEventBus
 import com.belijolie.scanner.util.toHumanMessage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -106,6 +107,11 @@ class CheckoutViewModel(
     }
 
     private suspend fun handleScan(barcode: String) {
+        // Nav Compose garde les VMs de l'écran précédent vivants (ChannelsList
+        // en back-stack quand on est sur le détail) → 2 collectors reçoivent
+        // le même event. Dedupe partagé : seul le 1er traite, l'autre skip.
+        if (!ScanDedupe.claim(barcode)) return
+
         // Ignore duplicate scans while the "unknown product" sheet is open.
         if (_unknownBarcode.value != null) return
 
