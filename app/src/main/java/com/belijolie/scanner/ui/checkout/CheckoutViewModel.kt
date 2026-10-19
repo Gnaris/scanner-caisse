@@ -18,7 +18,6 @@ import com.belijolie.scanner.export.ChannelExporter
 import com.belijolie.scanner.export.ExportFormat
 import com.belijolie.scanner.printer.EscPosPrinter
 import com.belijolie.scanner.printer.TicketLang
-import com.belijolie.scanner.scanner.ScanDedupe
 import com.belijolie.scanner.scanner.ScanEventBus
 import com.belijolie.scanner.util.toHumanMessage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -99,6 +98,18 @@ class CheckoutViewModel(
     private val _lastScan = MutableStateFlow<LastScan?>(null)
     val lastScan: StateFlow<LastScan?> = _lastScan.asStateFlow()
 
+    /**
+     * Canal que CE VM précisément s'attend à voir actif. Nav Compose garde
+     * les VMs de l'écran précédent (liste des canaux) vivants quand on
+     * navigue vers le détail : chaque VM a son propre `collect` sur
+     * [ScanEventBus] → sans filtre, 2 VMs traitent le même scan en parallèle
+     * et le produit arrive 2x dans le panier. Ici chaque VM compare son
+     * [expectedChannelId] local avec l'[activeChannelId] du repo (partagé)
+     * — seul celui qui "possède" vraiment le détail courant process le scan.
+     * Le VM de la liste a `expectedChannelId == null` → skip tout scan.
+     */
+    private var expectedChannelId: String? = null
+
     init {
         // Collect barcodes scanned anywhere in the app while this VM is alive.
         viewModelScope.launch {
@@ -107,15 +118,15 @@ class CheckoutViewModel(
     }
 
     private suspend fun handleScan(barcode: String) {
-        // Nav Compose garde les VMs de l'écran précédent vivants (ChannelsList
-        // en back-stack quand on est sur le détail) → 2 collectors reçoivent
-        // le même event. Dedupe partagé : seul le 1er traite, l'autre skip.
-        if (!ScanDedupe.claim(barcode)) return
-
         // Ignore duplicate scans while the "unknown product" sheet is open.
         if (_unknownBarcode.value != null) return
 
         val st = channelsRepo.current()
+        // N'intervient que si ce VM est bien celui du canal courant. Évite
+        // qu'un VM en back-stack process aussi le même scan (double qty) et
+        // garantit que `_lastScan` / `_unknownBarcode` / `_scanMultiplier`
+        // utilisés sont ceux de l'écran que l'utilisateur voit vraiment.
+        if (expectedChannelId == null || expectedChannelId != st.activeChannelId) return
         // Nouvelle UX : pas d'auto-création de canal. L'utilisateur passe
         // forcément par la liste → bouton « Créer un canal » → détail. Un
         // scan hors d'un canal ouvert est ignoré (décision produit).
@@ -319,6 +330,9 @@ class CheckoutViewModel(
     }
 
     fun selectChannel(id: String) {
+        // Positionné en synchrone (hors coroutine) pour qu'un scan arrivé
+        // juste après la navigation voit déjà le bon expectedChannelId.
+        expectedChannelId = id
         viewModelScope.launch {
             channelsRepo.setActive(id)
             // Changement de canal → l'historique du dernier scan appartient
@@ -333,6 +347,7 @@ class CheckoutViewModel(
      * liste ne doit alimenter aucun panier.
      */
     fun clearActiveChannel() {
+        expectedChannelId = null
         viewModelScope.launch {
             channelsRepo.clearActive()
             _lastScan.value = null
