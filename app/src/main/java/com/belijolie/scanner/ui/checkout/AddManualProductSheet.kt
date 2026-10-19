@@ -56,12 +56,13 @@ import com.belijolie.scanner.util.CategoryTranslator
 fun AddManualProductSheet(
     categories: List<Category>,
     onDismiss: () -> Unit,
-    onConfirm: (categoryName: String, priceCents: Int, nameEn: String?) -> Unit
+    onConfirm: (categoryName: String, priceCents: Int, quantity: Int, nameEn: String?) -> Unit
 ) {
     var categoryText by remember { mutableStateOf("") }
     var nameEn by remember { mutableStateOf("") }
     var lastSuggestion by remember { mutableStateOf("") }
     var priceText by remember { mutableStateOf("") }
+    var qtyText by remember { mutableStateOf("1") }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -143,24 +144,38 @@ fun AddManualProductSheet(
                 )
                 Spacer(Modifier.height(12.dp))
 
-                AppTextField(
-                    value = priceText,
-                    onValueChange = { priceText = it },
-                    label = stringResource(R.string.manual_price_label),
-                    mode = KeyboardMode.DECIMAL
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        AppTextField(
+                            value = priceText,
+                            onValueChange = { priceText = it },
+                            label = stringResource(R.string.manual_price_label),
+                            mode = KeyboardMode.DECIMAL
+                        )
+                    }
+                    Box(modifier = Modifier.weight(0.6f)) {
+                        AppTextField(
+                            value = qtyText,
+                            onValueChange = { qtyText = it.filter { c -> c.isDigit() } },
+                            label = stringResource(R.string.checkout_quantity),
+                            mode = KeyboardMode.NUMBER
+                        )
+                    }
+                }
                 Spacer(Modifier.height(16.dp))
 
                 Button(
                     onClick = {
                         val cents = parsePriceCentsManual(priceText) ?: return@Button
+                        val qty = qtyText.toIntOrNull()?.coerceAtLeast(1) ?: 1
                         onConfirm(
                             categoryText.trim(),
                             cents,
+                            qty,
                             nameEn.trim().takeIf { it.isNotEmpty() }
                         )
                     },
-                    enabled = categoryText.isNotBlank() && parsePriceCentsManual(priceText) != null,
+                    enabled = categoryText.isNotBlank() && parsePriceCentsManual(priceText) != null && (qtyText.toIntOrNull()?.let { it >= 1 } == true),
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5)),
                     modifier = Modifier.fillMaxWidth().height(54.dp)

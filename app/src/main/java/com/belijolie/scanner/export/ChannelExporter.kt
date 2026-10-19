@@ -106,20 +106,24 @@ object ChannelExporter {
      * d'erreur formaté (plusieurs lignes) ou null si tout est OK.
      *
      * Règles :
-     *  - Toute ligne manuelle (barcode vide) nécessite [manualArticleCode]
-     *    non vide dans les paramètres.
+     *  - Toute ligne manuelle (barcode vide) SANS sageArticleCode nécessite
+     *    [manualArticleCode] non vide dans les paramètres. Si la ligne manuelle
+     *    porte déjà un sageArticleCode (= nom tapé qui matche une catégorie
+     *    existante), elle utilise ce code et n'exige pas le fallback.
      *  - Toute ligne scannée (barcode non vide) nécessite [CartLine.sageArticleCode]
      *    non vide (= sa catégorie a été configurée en DB).
      */
     private fun validateSage(lines: List<CartLine>, manualArticleCode: String): String? {
-        val hasManualLine = lines.any { it.barcode.isBlank() }
+        val hasManualLineWithoutCode = lines.any {
+            it.barcode.isBlank() && it.sageArticleCode.isNullOrBlank()
+        }
         val categoriesMissingCode = lines
             .filter { it.barcode.isNotBlank() && it.sageArticleCode.isNullOrBlank() }
             .map { it.categoryName }
             .distinct()
 
         val errors = mutableListOf<String>()
-        if (hasManualLine && manualArticleCode.isBlank()) {
+        if (hasManualLineWithoutCode && manualArticleCode.isBlank()) {
             errors += "• Des produits ont été ajoutés manuellement au panier, mais aucun " +
                 "« Code article Sage manuel » n'est renseigné dans les paramètres."
         }
@@ -243,11 +247,13 @@ object ChannelExporter {
         append("E;Facture;;$today;$SAGE_CLIENT_CODE;;;;;\r\n")
 
         sortLines(channel.lines).forEach { line ->
-            val code = if (line.barcode.isBlank()) {
-                manualArticleCode
-            } else {
-                line.sageArticleCode.orEmpty()
-            }
+            // Priorité au sageArticleCode porté par la ligne (snapshot pris
+            // soit depuis la catégorie DB au moment du scan, soit depuis le
+            // match normalisé du nom à l'ajout manuel). Fallback sur le code
+            // "produit manuel" des Paramètres uniquement si la ligne manuelle
+            // n'a aucun code (nom tapé qui ne matche aucune catégorie DB).
+            val code = line.sageArticleCode?.takeIf { it.isNotBlank() }
+                ?: if (line.barcode.isBlank()) manualArticleCode else ""
             val qty = line.quantity.toString()
             val puht = formatPrice(line.unitPriceCents)
             val desc = buildSageRtfDescription(line.categoryName, line.barcode)

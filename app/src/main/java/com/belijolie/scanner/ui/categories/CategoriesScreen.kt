@@ -53,6 +53,7 @@ fun CategoriesScreen(
     val error by vm.error.collectAsStateWithLifecycle()
     var showAdd by remember { mutableStateOf(false) }
     var categoryToEdit by remember { mutableStateOf<Category?>(null) }
+    var categoryToDelete by remember { mutableStateOf<Category?>(null) }
 
     Scaffold(
         floatingActionButton = {
@@ -100,7 +101,7 @@ fun CategoriesScreen(
                         IconButton(onClick = { categoryToEdit = c }) {
                             Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.common_edit))
                         }
-                        IconButton(onClick = { vm.delete(c) }) {
+                        IconButton(onClick = { categoryToDelete = c }) {
                             Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.common_delete))
                         }
                     }
@@ -148,6 +149,31 @@ fun CategoriesScreen(
             title = { Text(stringResource(R.string.common_error)) },
             text = { Text(msg) },
             confirmButton = { TextButton(onClick = vm::dismissError) { Text(stringResource(R.string.common_ok)) } }
+        )
+    }
+
+    categoryToDelete?.let { cat ->
+        AlertDialog(
+            onDismissRequest = { categoryToDelete = null },
+            title = { Text(stringResource(R.string.category_delete_title)) },
+            text = { Text(stringResource(R.string.category_delete_body, cat.name)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.delete(cat)
+                    categoryToDelete = null
+                }) {
+                    Text(
+                        stringResource(R.string.common_delete),
+                        color = Color(0xFFB91C1C),
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { categoryToDelete = null }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            }
         )
     }
 }

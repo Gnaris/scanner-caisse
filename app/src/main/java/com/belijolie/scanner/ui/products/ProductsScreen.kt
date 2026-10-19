@@ -65,6 +65,7 @@ fun ProductsScreen(
     val error by vm.error.collectAsStateWithLifecycle()
     var showAdd by remember { mutableStateOf(false) }
     var productToEdit by remember { mutableStateOf<ProductWithCategory?>(null) }
+    var productToDelete by remember { mutableStateOf<ProductWithCategory?>(null) }
 
     Scaffold(
         floatingActionButton = {
@@ -93,7 +94,7 @@ fun ProductsScreen(
                     ProductRow(
                         p,
                         onEdit = { productToEdit = p },
-                        onDelete = { vm.delete(p.product) },
+                        onDelete = { productToDelete = p },
                     )
                 }
             }
@@ -129,6 +130,37 @@ fun ProductsScreen(
             title = { Text(stringResource(R.string.common_error)) },
             text = { Text(msg) },
             confirmButton = { TextButton(onClick = vm::dismissError) { Text(stringResource(R.string.common_ok)) } }
+        )
+    }
+
+    productToDelete?.let { pwc ->
+        AlertDialog(
+            onDismissRequest = { productToDelete = null },
+            title = { Text(stringResource(R.string.product_delete_title)) },
+            text = {
+                Text(stringResource(
+                    R.string.product_delete_body,
+                    pwc.category.name,
+                    pwc.product.barcode,
+                ))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.delete(pwc.product)
+                    productToDelete = null
+                }) {
+                    Text(
+                        stringResource(R.string.common_delete),
+                        color = Color(0xFFB91C1C),
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { productToDelete = null }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            }
         )
     }
 }

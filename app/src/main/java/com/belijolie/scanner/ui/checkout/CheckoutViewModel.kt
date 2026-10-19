@@ -432,7 +432,12 @@ class CheckoutViewModel(
      * à l'export Sage, elles tombent sur settings.sageManualArticleCode
      * (détecté via barcode vide).
      */
-    fun addManualToCart(categoryName: String, priceCents: Int, nameEn: String? = null) {
+    fun addManualToCart(
+        categoryName: String,
+        priceCents: Int,
+        quantity: Int = 1,
+        nameEn: String? = null,
+    ) {
         viewModelScope.launch {
             val st = channelsRepo.current()
             if (st.activeChannelId == null) {
@@ -440,16 +445,23 @@ class CheckoutViewModel(
             }
             val cleanedCat = categoryName.trim()
             val cleanedNameEn = nameEn?.trim()?.takeIf { it.isNotEmpty() }
-            // Si la catégorie existe en DB, on hérite de son nameEn comme fallback
-            // (sauf si l'utilisateur a fourni un nameEn custom qui prend le dessus).
-            val fallbackCatEn = db.categoryDao().findByName(cleanedCat)?.nameEn
+            // Match normalisé (ignore accents + espaces + casse) : si le nom
+            // tapé par l'utilisateur correspond exactement à une catégorie
+            // existante, on hérite de son nameEn ET surtout de son
+            // sageArticleCode. L'export Sage utilisera alors ce code au lieu
+            // du settings.sageManualArticleCode fallback.
+            val matched = db.categoryDao().getAll().firstOrNull {
+                normalizeForMatch(it.name) == normalizeForMatch(cleanedCat)
+            }
             channelsRepo.addProductToActive(
                 productId = -System.currentTimeMillis(),
                 barcode = "",
                 categoryName = cleanedCat,
                 priceCents = priceCents,
-                categoryNameEn = fallbackCatEn,
-                nameEn = cleanedNameEn
+                categoryNameEn = matched?.nameEn,
+                nameEn = cleanedNameEn,
+                sageArticleCode = matched?.sageArticleCode,
+                quantity = quantity,
             )
         }
     }
@@ -494,6 +506,18 @@ class CheckoutViewModel(
             return CheckoutViewModel(app.channelsRepo, app.settingsStore, app.db) as T
         }
     }
+}
+
+/**
+ * Normalise une chaîne pour comparaison de nom de catégorie : supprime les
+ * diacritiques (é → e, à → a…), retire tous les espaces, met en minuscules.
+ * "Boucles d'oreilles" et "bouclesdoreilles" matchent.
+ */
+internal fun normalizeForMatch(s: String): String {
+    val nfd = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD)
+    return nfd.replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+        .replace(Regex("\\s+"), "")
+        .lowercase()
 }
 
 /**

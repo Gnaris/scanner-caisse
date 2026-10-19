@@ -407,8 +407,8 @@ fun ChannelDetailScreen(
         AddManualProductSheet(
             categories = categories,
             onDismiss = { showAddManual = false },
-            onConfirm = { categoryName, cents, nameEn ->
-                vm.addManualToCart(categoryName, cents, nameEn)
+            onConfirm = { categoryName, cents, qty, nameEn ->
+                vm.addManualToCart(categoryName, cents, qty, nameEn)
                 showAddManual = false
             }
         )

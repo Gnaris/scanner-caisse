@@ -105,6 +105,12 @@
     <string name="product_price">Prix / 价格 (€)</string>
     <string name="product_no_category_hint">Crée d\'abord une catégorie dans l\'onglet « Catégories ». / 请先在"类别"标签中创建一个类别。</string>
     <string name="product_edit_title">Modifier le produit / 编辑商品</string>
+    <string name="product_delete_title">Supprimer ce produit ? / 删除此商品？</string>
+    <string name="product_delete_body">Le produit « %1$s » (code-barres %2$s) sera supprimé définitivement. / 商品「%1$s」(条形码 %2$s) 将被永久删除。</string>
+
+    <!-- Suppression catégorie -->
+    <string name="category_delete_title">Supprimer cette catégorie ? / 删除此类别？</string>
+    <string name="category_delete_body">La catégorie « %1$s » sera supprimée définitivement. Impossible si des produits y sont rattachés. / 类别「%1$s」将被永久删除。如果有商品使用此类别,则无法删除。</string>
 
     <!-- Caisse : multiplicateur de quantité -->
     <string name="checkout_qty_mult_label">Quantité par scan / 每次扫描数量</string>
