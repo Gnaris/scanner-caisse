@@ -213,8 +213,14 @@ class CheckoutViewModel(
             _isExporting.value = true
             val result = ChannelExporter.exportChannel(settings, channel, format)
             _isExporting.value = false
-            result.onSuccess { filename ->
-                _exportResult.value = PrintResult(true, ctx.getString(R.string.checkout_export_sent, filename))
+            result.onSuccess { success ->
+                val msg = when (success) {
+                    is com.belijolie.scanner.export.ExportSuccess.File ->
+                        ctx.getString(R.string.checkout_export_sent, success.filename)
+                    is com.belijolie.scanner.export.ExportSuccess.SageInvoice ->
+                        ctx.getString(R.string.checkout_export_sage_created, success.numero)
+                }
+                _exportResult.value = PrintResult(true, msg)
             }.onFailure { e ->
                 _exportResult.value = PrintResult(false, e.toHumanMessage(ctx))
             }

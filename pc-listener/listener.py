@@ -152,6 +152,45 @@ def write_export(cfg: dict, filename: str, body: bytes) -> Path:
     return target
 
 
+SAGEBRIDGE_URL = "http://127.0.0.1:8765/facture"
+SAGEBRIDGE_TIMEOUT = 150  # SageBridge borne Sage à 120 s en interne
+
+
+def relay_to_sagebridge(body: bytes) -> tuple[int, bytes, str]:
+    """Relaie un POST JSON vers SageBridge (loopback). Renvoie
+    (status, body, content_type). Les erreurs réseau sont converties en
+    HTTP 502 avec un JSON lisible côté PDA — SageBridge n'étant pas joignable
+    signifie « ouvre SageBridge sur ce PC »."""
+    req = urllib.request.Request(
+        SAGEBRIDGE_URL,
+        data=body,
+        method="POST",
+        headers={"Content-Type": "application/json; charset=utf-8"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=SAGEBRIDGE_TIMEOUT) as r:
+            data = r.read()
+            ctype = r.headers.get("Content-Type", "application/json; charset=utf-8")
+            return r.status, data, ctype
+    except urllib.error.HTTPError as e:
+        # SageBridge renvoie 409 (doublon), 500 (refus Sage), 400, 403, 413…
+        # On transfère tel quel : le PDA sait lire { ok, error, numero } côté JSON.
+        payload = e.read() or b""
+        ctype = e.headers.get("Content-Type", "application/json; charset=utf-8") if e.headers else "application/json; charset=utf-8"
+        return e.code, payload, ctype
+    except urllib.error.URLError as e:
+        logging.warning("Relais SageBridge échoué (%s)", e)
+        msg = (
+            '{"ok":false,"error":"SageBridge est injoignable sur ce PC. '
+            'Ouvre SageBridge puis réessaie."}'
+        )
+        return 502, msg.encode("utf-8"), "application/json; charset=utf-8"
+    except Exception as e:
+        logging.warning("Relais SageBridge erreur (%s)", e)
+        msg = '{"ok":false,"error":"Erreur de relais vers SageBridge."}'
+        return 502, msg.encode("utf-8"), "application/json; charset=utf-8"
+
+
 class ExportHandler(BaseHTTPRequestHandler):
     server_cfg: dict = {}
 
@@ -160,7 +199,10 @@ class ExportHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):  # noqa: N802
         parsed = urlparse(self.path)
-        if parsed.path.rstrip("/") not in ("/export", ""):
+        path = parsed.path.rstrip("/")
+        if path == "/sage-facture":
+            return self._handle_sage_facture()
+        if path not in ("/export", ""):
             self.send_response(404); self.end_headers(); return
         length = int(self.headers.get("Content-Length") or 0)
         if length <= 0 or length > 32 * 1024 * 1024:
@@ -173,6 +215,21 @@ class ExportHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
         self.wfile.write(f"OK {target.name}".encode("utf-8"))
+
+    def _handle_sage_facture(self) -> None:
+        length = int(self.headers.get("Content-Length") or 0)
+        if length <= 0 or length > 2 * 1024 * 1024:
+            self.send_response(400); self.end_headers()
+            self.wfile.write(b'{"ok":false,"error":"Payload invalide."}')
+            return
+        body = self.rfile.read(length)
+        logging.info("Relais → SageBridge (%d octets)", len(body))
+        status, data, ctype = relay_to_sagebridge(body)
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
 
 class ListenerServer:

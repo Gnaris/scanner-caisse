@@ -74,16 +74,25 @@ printer/
                          gros titre + subtitle, +10px bottomMargin anti-coupure].
                          Alignement via [C]<img>.
 export/
-  ChannelExporter.kt     Export CSV / JSON / Sage 50 via POST HTTP vers exportUrl.
-                         enum ExportFormat { CSV, JSON, SAGE }. CSV avec BOM UTF-8
-                         + ; + virgule décimale (ouverture directe Excel FR). Sage
-                         encodé Windows-1252, RTF description. PLUS DE mapping
-                         catégorie→code hardcodé : les codes articles Sage sont
-                         saisis par l'utilisateur sur chaque catégorie
-                         (Category.sageArticleCode). validateSage() avant export →
-                         SageExportValidationException avec message formaté listant
-                         les catégories/configs manquantes. Produits sans barcode
-                         (= manuels) utilisent `settings.sageManualArticleCode`.
+  ChannelExporter.kt     Export via POST HTTP. enum ExportFormat { CSV, JSON, SAGE }.
+                         - CSV : BOM UTF-8 + ; + virgule décimale (ouverture Excel
+                           FR), POST vers settings.exportUrl avec ?filename=.
+                         - JSON : idem CSV mais en JSON brut.
+                         - SAGE : crée DIRECTEMENT une facture provisoire dans
+                           Sage 50 via SageBridge. Le PDA POST un JSON
+                           InvoiceRequest à {baseUrl}/sage-facture du pc-listener
+                           (déduit en remplaçant le path de settings.exportUrl) ;
+                           pc-listener relaie à http://127.0.0.1:8765/facture
+                           (SageBridge, loopback). Code client en dur à "003",
+                           orderNo = channel.id (anti-doublon natif SageBridge
+                           → 409 si recliqué). Description de ligne = nom
+                           catégorie en MAJUSCULES, PAS de code-barres (choix
+                           produit : le barcode ne doit pas apparaître sur la
+                           facture Sage). validateSage() avant appel réseau →
+                           SageExportValidationException si codes articles
+                           manquants. Return type : sealed ExportSuccess { File,
+                           SageInvoice(numero) } pour que le ViewModel choisisse
+                           la bonne string de confirmation.
 util/
   NetworkErrors.kt       Throwable.toHumanMessage(ctx) : message FR humain selon
                          type d'exception (UnknownHostException, ConnectException…)
@@ -425,8 +434,14 @@ pc-listener/
 ```
 
 ### Fonctionnalités
-- Serveur HTTP sur port configurable (défaut 8080), endpoint `POST /export`
-  reçoit CSV / JSON / Sage avec `?filename=` → écrit dans dossier d'export
+- Serveur HTTP sur port configurable (défaut 8080), endpoints :
+  - `POST /export?filename=…` : reçoit CSV / JSON du PDA → écrit dans le dossier
+    d'export.
+  - `POST /sage-facture` : relais vers SageBridge (`http://127.0.0.1:8765/facture`,
+    loopback). Prend le JSON InvoiceRequest du PDA, le fait suivre tel quel,
+    renvoie status + body SageBridge au PDA. Si SageBridge n'est pas lancé →
+    HTTP 502 + `{"ok":false,"error":"SageBridge est injoignable sur ce PC."}`.
+    Timeout 150 s (SageBridge borne Sage à 120 s en interne).
 - Icône bleue "S" dans la zone de notification (pystray + icône générée Pillow)
 - Fenêtre Paramètres Tkinter (clic sur icône) : nom entreprise, port, dossier
   d'export, autostart Windows, IP locales affichées + section mise à jour
@@ -552,15 +567,23 @@ PyInstaller). Logs dans `%APPDATA%\ScannerListener\listener.log`.
   réalité comptable). Modifiable via le bouton "%" dans la TotalBar (dialog
   NUMBER 0-100). Le bouton passe en vert et affiche le % quand une remise est
   active ; sinon violet neutre.
-- **Export Sage 50** : encodage Windows-1252 (pas UTF-8 avec BOM comme le CSV
-  normal), description RTF single-line (`\line` + `\'xx` pour les accents).
-  Les codes articles sont désormais **saisis par l'utilisateur sur chaque
-  catégorie** (`Category.sageArticleCode`) — plus de mapping hardcodé
-  `ART0001..ART0019`. Validation bloquante dans `ChannelExporter.validateSage()`
-  avant l'appel réseau : erreur formatée listant les catégories sans code et/ou
-  le `sageManualArticleCode` manquant pour les lignes manuelles. Erreur affichée
-  dans un AlertDialog côté `CheckoutScreen` (snackbar insuffisant pour un message
-  multi-ligne).
+- **Export Sage 50 → création directe de facture via SageBridge** : le bouton
+  "Sage 50" ne génère plus un CSV à importer dans Sage ; il crée directement
+  une **facture provisoire** dans Sage 50 par l'interface COM. Chemin :
+  PDA → pc-listener (LAN) → SageBridge (loopback 127.0.0.1:8765) → Sage COM.
+  Payload JSON : `{ site, orderNo=channel.id, client="003", remarque=channel.name,
+  force=false, simulation=false, lines=[{code, qty, puht, tva=20, description}] }`.
+  Le code client est en dur à "003" (client par défaut Beli & Jolie dans le
+  dossier Princesse). `orderNo = channel.id` déclenche l'anti-doublon natif
+  de SageBridge (reclique → HTTP 409, le PDA affiche "déjà créée"). Description
+  = nom de catégorie en MAJUSCULES, sans code-barres (choix produit : le barcode
+  n'a rien à faire sur la facture Sage). Codes articles toujours pilotés par
+  `Category.sageArticleCode` + `settings.sageManualArticleCode` (fallback produit
+  manuel). Validation bloquante dans `ChannelExporter.validateSage()` avant
+  l'appel réseau. Le ViewModel retourne un `ExportSuccess.SageInvoice(numero)`
+  → "Facture Sage créée : n° XXX". Prérequis côté PC Boris : SageBridge
+  installé + ouvert + autorisation d'accès COM activée dans Sage (voir
+  `C:\Users\Admin\Desktop\SageBridge\CLAUDE.md`).
 - **Impression bilingue (FR / EN)** : paramètre `TicketLang` sur
   `EscPosPrinter.printReceipt`, choisi dans `PrintConfirmDialog` juste avant
   d'envoyer. `TicketLabels.FR` / `TicketLabels.EN` concentrent tous les libellés

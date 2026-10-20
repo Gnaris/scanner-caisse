@@ -34,6 +34,7 @@
     <string name="checkout_cart_empty">Panier vide / 购物车为空</string>
     <string name="checkout_ticket_printed">Ticket imprimé / 小票已打印</string>
     <string name="checkout_export_sent">Export envoyé / 导出已发送 : %1$s</string>
+    <string name="checkout_export_sage_created">Facture Sage créée / Sage 发票已创建 : n° %1$s</string>
     <string name="checkout_total_quantity">Quantité totale / 商品总数</string>
     <string name="checkout_total_ht">Total HT / 税前总计</string>
     <string name="checkout_total_vat">TVA / 增值税 (20%)</string>
