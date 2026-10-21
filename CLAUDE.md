@@ -576,8 +576,9 @@ PyInstaller). Logs dans `%APPDATA%\ScannerListener\listener.log`.
   "Sage 50" ne génère plus un CSV à importer dans Sage ; il crée directement
   une **facture provisoire** dans Sage 50 par l'interface COM. Chemin :
   PDA → pc-listener (LAN) → SageBridge (loopback 127.0.0.1:8765) → Sage COM.
-  Payload JSON : `{ site, orderNo=channel.id, client="003", remarque=channel.name,
-  force=false, simulation=false, lines=[{code, qty, puht, tva=20, description}] }`.
+  Payload JSON : `{ site, orderNo=channel.id, client="003", force=false,
+  simulation=false, lines=[{code, qty, puht, tva=20, description}] }`.
+  Pas de `remarque` : le nom du canal n'a pas sa place sur la facture Sage.
   Le code client est en dur à "003" (client par défaut Beli & Jolie dans le
   dossier Princesse). `orderNo = channel.id` déclenche l'anti-doublon natif
   de SageBridge (reclique → HTTP 409, le PDA affiche "déjà créée"). Description

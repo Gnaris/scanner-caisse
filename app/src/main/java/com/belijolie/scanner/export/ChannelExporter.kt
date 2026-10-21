@@ -335,7 +335,6 @@ object ChannelExporter {
         root.put("site", SAGE_SITE)
         root.put("orderNo", channel.id)
         root.put("client", SAGE_CLIENT_CODE)
-        root.put("remarque", channel.name)
         root.put("force", false)
         root.put("simulation", false)
 
