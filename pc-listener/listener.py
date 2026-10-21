@@ -314,11 +314,16 @@ class Updater:
 
     def _check_and_download(self) -> None:
         self.status = "checking"; self._emit()
+        # IMPORTANT : on NE PEUT PAS utiliser /releases/latest. Le repo contient
+        # aussi les releases de l'app Android (tag "app-v*") qui s'intercalent
+        # chronologiquement. /releases/latest renverrait alors un APK au lieu
+        # d'un ZIP et l'updater tomberait en erreur. On liste donc toutes les
+        # releases récentes et on filtre sur le préfixe de tag "pc-listener-v".
         try:
-            url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+            url = f"https://api.github.com/repos/{GITHUB_REPO}/releases?per_page=20"
             req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
             with urllib.request.urlopen(req, timeout=10) as r:
-                data = json.loads(r.read().decode("utf-8"))
+                all_releases = json.loads(r.read().decode("utf-8"))
         except urllib.error.URLError as e:
             logging.warning("Updater : check impossible (%s)", e)
             self.status = "error"; self._emit(); return
@@ -326,14 +331,31 @@ class Updater:
             logging.warning("Updater : réponse invalide (%s)", e)
             self.status = "error"; self._emit(); return
 
-        # Le tag peut être "1.0.1", "v1.0.1" ou "pc-listener-v1.0.1" : on
-        # extrait le numéro de version avec une regex pour être robuste.
-        raw_tag = str(data.get("tag_name", ""))
-        m = re.search(r"(\d+(?:\.\d+)+)", raw_tag)
-        tag = m.group(1) if m else ""
-        if not tag:
-            logging.warning("Updater : tag_name '%s' sans numéro de version.", raw_tag)
+        if not isinstance(all_releases, list) or not all_releases:
+            logging.warning("Updater : aucune release trouvée.")
             self.status = "uptodate"; self._emit(); return
+
+        # Garde uniquement les releases pc-listener (tag "pc-listener-vX.Y.Z"),
+        # non draft, non prerelease, puis prend la plus haute version semver.
+        candidates = []
+        for rel in all_releases:
+            if rel.get("draft") or rel.get("prerelease"):
+                continue
+            raw_tag = str(rel.get("tag_name", ""))
+            if not raw_tag.startswith("pc-listener-v"):
+                continue
+            m = re.search(r"(\d+(?:\.\d+)+)", raw_tag)
+            if m:
+                candidates.append((m.group(1), rel))
+
+        if not candidates:
+            logging.warning("Updater : aucune release pc-listener-v* trouvée.")
+            self.status = "uptodate"; self._emit(); return
+
+        # Tri décroissant par version semver.
+        candidates.sort(key=lambda t: [int(x) for x in t[0].split(".")], reverse=True)
+        tag, data = candidates[0]
+
         if _version_cmp(tag, APP_VERSION) <= 0:
             self.status = "uptodate"
             logging.info("Updater : à jour (v%s, latest=%s).", APP_VERSION, tag)

@@ -455,6 +455,11 @@ pc-listener/
   xcopy du dossier, logs dans `%TEMP%\ScannerListener-apply-update.log`).
   Au premier démarrage post-update, la fenêtre Paramètres s'ouvre automatique-
   ment pour que l'utilisateur voie la nouvelle version.
+  **IMPORTANT** : l'updater liste `/releases?per_page=20` et filtre sur les
+  tags `pc-listener-v*`. **NE PAS utiliser `/releases/latest`** car le dépôt
+  est partagé avec l'app Android (tags `app-v*`) et `latest` renverrait un
+  APK au lieu d'un ZIP → updater en erreur "vérification impossible". Cette
+  règle vaut aussi côté app Android (voir UpdateManager.kt).
 
 ### Décisions importantes pc-listener
 - **PyInstaller `--onedir`** (pas `--onefile`) : évite les crashs "Failed to
