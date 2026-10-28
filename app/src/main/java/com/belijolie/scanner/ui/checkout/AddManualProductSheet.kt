@@ -43,6 +43,7 @@ import com.belijolie.scanner.data.entity.Category
 import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
 import com.belijolie.scanner.util.CategoryTranslator
+import kotlin.math.roundToInt
 
 /**
  * Modal pour ajouter manuellement une ligne au canal actif.
@@ -248,5 +249,5 @@ private fun parsePriceCentsManual(text: String): Int? {
     val normalized = text.replace(',', '.')
     val value = normalized.toDoubleOrNull() ?: return null
     if (value < 0) return null
-    return (value * 100).toInt()
+    return (value * 100).roundToInt()
 }

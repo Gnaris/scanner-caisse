@@ -68,6 +68,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.belijolie.scanner.R
 import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
+import kotlin.math.roundToInt
 
 /**
  * Écran détail d'un canal : table des lignes du panier, totaux, boutons
@@ -793,7 +794,7 @@ private fun EditCartLineDialog(
     val qty = qtyText.toIntOrNull()?.coerceAtLeast(1)
     val priceCents = run {
         val n = priceText.replace(',', '.').toDoubleOrNull()
-        if (n == null || n < 0) null else (n * 100).toInt()
+        if (n == null || n < 0) null else (n * 100).roundToInt()
     }
 
     AlertDialog(
@@ -929,7 +930,7 @@ private fun EditLastScanDialog(
     val qty = qtyText.toIntOrNull()?.coerceAtLeast(1)
     val priceCents = run {
         val n = priceText.replace(',', '.').toDoubleOrNull()
-        if (n == null || n < 0) null else (n * 100).toInt()
+        if (n == null || n < 0) null else (n * 100).roundToInt()
     }
 
     AlertDialog(

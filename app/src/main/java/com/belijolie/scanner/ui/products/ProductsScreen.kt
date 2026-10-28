@@ -54,6 +54,7 @@ import com.belijolie.scanner.scanner.ScanEventBus
 import com.belijolie.scanner.ui.checkout.formatEuro
 import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -353,7 +354,7 @@ private fun parseCents(text: String): Int? {
     val normalized = text.replace(',', '.')
     val value = normalized.toDoubleOrNull() ?: return null
     if (value < 0) return null
-    return (value * 100).toInt()
+    return (value * 100).roundToInt()
 }
 
 /**

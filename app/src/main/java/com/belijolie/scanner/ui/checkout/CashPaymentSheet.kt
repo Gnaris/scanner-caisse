@@ -40,6 +40,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.belijolie.scanner.R
 import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
+import kotlin.math.roundToInt
 
 /**
  * Modal d'encaissement : affiche le total HT, laisse saisir le montant reçu,
@@ -217,5 +218,5 @@ private fun parseAmountCents(text: String): Int? {
     val normalized = text.replace(',', '.')
     val value = normalized.toDoubleOrNull() ?: return null
     if (value < 0) return null
-    return (value * 100).toInt()
+    return (value * 100).roundToInt()
 }

@@ -55,6 +55,7 @@ import com.belijolie.scanner.data.entity.ProductWithCategory
 import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
 import com.belijolie.scanner.ui.products.decodePriceFromBarcode
+import kotlin.math.roundToInt
 
 private enum class View { CREATE, PICK }
 
@@ -311,5 +312,5 @@ private fun parsePriceCents(text: String): Int? {
     val normalized = text.replace(',', '.')
     val value = normalized.toDoubleOrNull() ?: return null
     if (value < 0) return null
-    return (value * 100).toInt()
+    return (value * 100).roundToInt()
 }
