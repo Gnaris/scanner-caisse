@@ -480,8 +480,9 @@ class CheckoutViewModel(
             val matched = db.categoryDao().getAll().firstOrNull {
                 normalizeForMatch(it.name) == normalizeForMatch(cleanedCat)
             }
+            val manualProductId = -System.currentTimeMillis()
             channelsRepo.addProductToActive(
-                productId = -System.currentTimeMillis(),
+                productId = manualProductId,
                 barcode = "",
                 categoryName = cleanedCat,
                 priceCents = priceCents,
@@ -489,6 +490,17 @@ class CheckoutViewModel(
                 nameEn = cleanedNameEn,
                 sageArticleCode = matched?.sageArticleCode,
                 quantity = quantity,
+            )
+            ScanSounds.playFound()
+            _lastScan.value = LastScan(
+                productId = manualProductId,
+                barcode = "",
+                categoryName = cleanedCat,
+                priceCents = priceCents,
+                quantity = quantity,
+                categoryNameEn = matched?.nameEn,
+                nameEn = cleanedNameEn,
+                sageArticleCode = matched?.sageArticleCode,
             )
         }
     }
