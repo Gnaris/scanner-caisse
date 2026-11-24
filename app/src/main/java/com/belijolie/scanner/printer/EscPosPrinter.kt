@@ -6,6 +6,7 @@ import com.dantsu.escposprinter.EscPosPrinter
 import com.dantsu.escposprinter.EscPosPrinterCommands
 import com.dantsu.escposprinter.connection.tcp.TcpConnection
 import com.dantsu.escposprinter.textparser.PrinterTextParserImg
+import android.graphics.Bitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -69,72 +70,8 @@ object EscPosPrinter {
         val connection = TcpConnection(settings.printerIp, settings.printerPort, SOCKET_TIMEOUT_MS)
         val printer = EscPosPrinter(connection, DPI, PAPER_WIDTH_MM, CHARS_PER_LINE)
         try {
-            // Layout dynamique des QR codes selon ce qui est configuré :
-            // 0 → aucun bitmap ; 1 → single centré ; 2 → double côte à côte ;
-            // 3 → double (Microstore + Boutique) puis Avis Google en style
-            // "appel à l'action" en dessous.
-            val labels = TicketLabels.of(lang)
-            val microstore = settings.microstoreQr.takeIf { it.isNotBlank() }?.let {
-                TicketImage.QrEntry(
-                    title = labels.microstore,
-                    content = it,
-                    footer = settings.microstoreCode
-                )
-            }
-            val boutique = settings.websiteUrl.takeIf { it.isNotBlank() }?.let {
-                TicketImage.QrEntry(
-                    title = labels.onlineShop,
-                    content = it,
-                    footer = TicketImage.truncateForWidth(it, 24)
-                )
-            }
-            val avis = settings.googleReviewUrl.takeIf { it.isNotBlank() }
-
-            val qrBitmapsHex = mutableListOf<String>()
-            val entries = listOfNotNull(microstore, boutique)
-            when {
-                // Les 3 sont présents → double + section avis dédiée (style gros)
-                entries.size == 2 && avis != null -> {
-                    qrBitmapsHex += PrinterTextParserImg.bitmapToHexadecimalString(
-                        printer,
-                        TicketImage.composeDoubleQrSection(entries[0], entries[1])
-                    )
-                    qrBitmapsHex += PrinterTextParserImg.bitmapToHexadecimalString(
-                        printer,
-                        TicketImage.composeReviewQrSection(avis, lang)
-                    )
-                }
-                // 2 QR dont un est Avis → double avec style petit uniforme
-                entries.size == 1 && avis != null -> {
-                    val avisEntry = TicketImage.QrEntry(labels.googleReview, avis)
-                    qrBitmapsHex += PrinterTextParserImg.bitmapToHexadecimalString(
-                        printer,
-                        TicketImage.composeDoubleQrSection(entries[0], avisEntry)
-                    )
-                }
-                // 2 QR sans Avis → double standard
-                entries.size == 2 -> {
-                    qrBitmapsHex += PrinterTextParserImg.bitmapToHexadecimalString(
-                        printer,
-                        TicketImage.composeDoubleQrSection(entries[0], entries[1])
-                    )
-                }
-                // 1 QR seul parmi Microstore / Boutique → centré style petit
-                entries.size == 1 -> {
-                    qrBitmapsHex += PrinterTextParserImg.bitmapToHexadecimalString(
-                        printer,
-                        TicketImage.composeSingleQrSection(entries[0])
-                    )
-                }
-                // 1 QR = Avis Google seul → section d'appel à l'action centrée
-                entries.isEmpty() && avis != null -> {
-                    qrBitmapsHex += PrinterTextParserImg.bitmapToHexadecimalString(
-                        printer,
-                        TicketImage.composeReviewQrSection(avis, lang)
-                    )
-                }
-                // 0 QR → rien
-            }
+            val qrBitmapsHex = qrSectionBitmaps(settings, lang)
+                .map { PrinterTextParserImg.bitmapToHexadecimalString(printer, it) }
 
             printer.printFormattedText(buildReceipt(settings, lines, lang, qrBitmapsHex, discountPercent))
             val cmds = printer.commands()
@@ -143,6 +80,62 @@ object EscPosPrinter {
         } finally {
             printer.disconnectPrinter()
         }
+    }
+
+    /**
+     * Bitmaps des sections QR du bas de ticket (0, 1 ou 2 images de 576 px),
+     * selon ce qui est configuré. Partagé entre l'impression et le PDF.
+     */
+    fun qrSectionBitmaps(settings: AppSettings, lang: TicketLang): List<Bitmap> {
+        // Layout dynamique des QR codes selon ce qui est configuré :
+        // 0 → aucun bitmap ; 1 → single centré ; 2 → double côte à côte ;
+        // 3 → double (Microstore + Boutique) puis Avis Google en style
+        // "appel à l'action" en dessous.
+        val labels = TicketLabels.of(lang)
+        val microstore = settings.microstoreQr.takeIf { it.isNotBlank() }?.let {
+            TicketImage.QrEntry(
+                title = labels.microstore,
+                content = it,
+                footer = settings.microstoreCode
+            )
+        }
+        val boutique = settings.websiteUrl.takeIf { it.isNotBlank() }?.let {
+            TicketImage.QrEntry(
+                title = labels.onlineShop,
+                content = it,
+                footer = TicketImage.truncateForWidth(it, 24)
+            )
+        }
+        val avis = settings.googleReviewUrl.takeIf { it.isNotBlank() }
+
+        val bitmaps = mutableListOf<Bitmap>()
+        val entries = listOfNotNull(microstore, boutique)
+        when {
+            // Les 3 sont présents → double + section avis dédiée (style gros)
+            entries.size == 2 && avis != null -> {
+                bitmaps += TicketImage.composeDoubleQrSection(entries[0], entries[1])
+                bitmaps += TicketImage.composeReviewQrSection(avis, lang)
+            }
+            // 2 QR dont un est Avis → double avec style petit uniforme
+            entries.size == 1 && avis != null -> {
+                val avisEntry = TicketImage.QrEntry(labels.googleReview, avis)
+                bitmaps += TicketImage.composeDoubleQrSection(entries[0], avisEntry)
+            }
+            // 2 QR sans Avis → double standard
+            entries.size == 2 -> {
+                bitmaps += TicketImage.composeDoubleQrSection(entries[0], entries[1])
+            }
+            // 1 QR seul parmi Microstore / Boutique → centré style petit
+            entries.size == 1 -> {
+                bitmaps += TicketImage.composeSingleQrSection(entries[0])
+            }
+            // 1 QR = Avis Google seul → section d'appel à l'action centrée
+            entries.isEmpty() && avis != null -> {
+                bitmaps += TicketImage.composeReviewQrSection(avis, lang)
+            }
+            // 0 QR → rien
+        }
+        return bitmaps
     }
 
     suspend fun printTest(host: String, port: Int) = withContext(Dispatchers.IO) {
@@ -161,7 +154,7 @@ object EscPosPrinter {
         }
     }
 
-    private fun buildReceipt(
+    internal fun buildReceipt(
         settings: AppSettings,
         lines: List<CartLine>,
         lang: TicketLang,

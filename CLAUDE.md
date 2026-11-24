@@ -100,7 +100,12 @@ printer/
   EscPosPrinter.kt       Impression ticket (TCP) + feed/cut explicites par
                          réflexion. printReceipt(settings, lines, lang). Compose
                          les sections QR dynamiquement selon ce qui est configuré
-                         (voir Conventions ticket plus bas).
+                         (voir Conventions ticket plus bas). qrSectionBitmaps()
+                         et buildReceipt() sont partagés avec TicketPdf.
+  TicketPdf.kt           Ticket en PDF (page 80 mm, hauteur ajustée) dessiné à
+                         partir du MÊME texte formaté que l'impression ([L] [C]
+                         [R], <b>, <font size='big'>, <img>) + mêmes bitmaps QR.
+                         Toute modif de buildReceipt se retrouve donc dans le PDF.
   TicketImage.kt         Bitmaps QR codes (WIDTH_PX = 576, largeur imprimable
                          MUNBYN). API : data class QrEntry(title, content, footer)
                          + composeSingleQrSection(QrEntry) [centré] +
@@ -195,7 +200,10 @@ ui/
                          croix fermer + chevron). Clic sur carte → détail
                          (route "channel/{id}"). Au montage, clearActiveChannel()
                          pour que les scans ne tapent plus aucun canal tant
-                         qu'on n'ouvre pas un détail.
+                         qu'on n'ouvre pas un détail. Mode sélection multiple
+                         (bouton à droite de « Créer un canal » ou appui long
+                         sur une carte) : cases à cocher, « Tout », « Supprimer
+                         (N) » + confirmation → vm.closeChannels(ids).
     CheckoutScreen.kt    Écran détail d'un canal (fonction ChannelDetailScreen
                          avec channelId + onBack). PLUS de dropdown de switch
                          de canal. Barre du haut : [← retour] + [+ Ajouter
@@ -212,11 +220,14 @@ ui/
                          remisé. Headers colonnes empilés 2 lignes (FR\n中文).
                          LaunchedEffect(channelId) → selectChannel. Si le canal
                          est supprimé pendant qu'on l'affiche → onBack auto.
-    ExportFormatPickerDialog.kt  Dialog custom avec 3 cartes côte à côte (Excel
-                         vert, JSON orange, Sage 50 bleu), icône + label +
-                         sous-texte, Annuler discret en bas.
+    ExportFormatPickerDialog.kt  Dialog custom avec 4 cartes en 2 × 2 (Excel
+                         vert, JSON orange, Ticket PDF rouge, Sage 50 bleu),
+                         icône + label + sous-texte, Annuler discret en bas.
+                         Ticket PDF → PrintConfirmDialog (choix de langue)
+                         → vm.exportTicketPdf(id, lang).
     PrintConfirmDialog.kt  Dialog impression + sélecteur de langue du ticket
-                         (Français / English, FR par défaut). Bouton Annuler =
+                         (Français / English, FR par défaut). Titre / texte /
+                         bouton paramétrables (réutilisé pour le PDF). Bouton Annuler =
                          OutlinedButton gris pâle (fond visible, pas fondu),
                          bouton Imprimer violet, les deux en weight(1f) symétriques.
     CheckoutViewModel.kt handleScan + ScanSounds + sortLines + printActive(lang) +

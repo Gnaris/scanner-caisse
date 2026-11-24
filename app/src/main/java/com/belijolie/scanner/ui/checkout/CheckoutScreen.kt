@@ -27,6 +27,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Delete
@@ -131,6 +132,7 @@ fun ChannelDetailScreen(
     var showPrintConfirm by remember { mutableStateOf(false) }
     var showCashPayment by remember { mutableStateOf(false) }
     var showExportFormat by remember { mutableStateOf(false) }
+    var showPdfConfirm by remember { mutableStateOf(false) }
     var showDiscountDialog by remember { mutableStateOf(false) }
     var lineToRemove by remember { mutableStateOf<com.belijolie.scanner.cart.CartLine?>(null) }
     var lineToEdit by remember { mutableStateOf<com.belijolie.scanner.cart.CartLine?>(null) }
@@ -473,7 +475,25 @@ fun ChannelDetailScreen(
             onPick = { format ->
                 showExportFormat = false
                 activeChannel?.let { vm.exportChannel(it.id, format) }
-            }
+            },
+            onPickPdf = {
+                showExportFormat = false
+                showPdfConfirm = true
+            },
+        )
+    }
+
+    if (showPdfConfirm) {
+        PrintConfirmDialog(
+            onDismiss = { showPdfConfirm = false },
+            onConfirm = { lang ->
+                showPdfConfirm = false
+                activeChannel?.let { vm.exportTicketPdf(it.id, lang) }
+            },
+            title = stringResource(R.string.pdf_confirm_title),
+            body = stringResource(R.string.pdf_confirm_body),
+            confirmLabel = stringResource(R.string.pdf_confirm_button),
+            confirmIcon = Icons.Default.PictureAsPdf,
         )
     }
 

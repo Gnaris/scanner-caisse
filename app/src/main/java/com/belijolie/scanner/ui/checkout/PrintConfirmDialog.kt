@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,7 +44,12 @@ import com.belijolie.scanner.printer.TicketLang
 @Composable
 fun PrintConfirmDialog(
     onDismiss: () -> Unit,
-    onConfirm: (TicketLang) -> Unit
+    onConfirm: (TicketLang) -> Unit,
+    // Réutilisé pour l'export du ticket en PDF (même choix de langue)
+    title: String = stringResource(R.string.print_confirm_title),
+    body: String = stringResource(R.string.print_confirm_body),
+    confirmLabel: String = stringResource(R.string.common_print),
+    confirmIcon: ImageVector = Icons.Default.Print,
 ) {
     var lang by remember { mutableStateOf(TicketLang.FR) }
 
@@ -63,14 +69,14 @@ fun PrintConfirmDialog(
                 modifier = Modifier.padding(20.dp)
             ) {
                 Text(
-                    stringResource(R.string.print_confirm_title),
+                    title,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF111111)
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    stringResource(R.string.print_confirm_body),
+                    body,
                     fontSize = 13.sp,
                     color = Color.Gray
                 )
@@ -126,9 +132,9 @@ fun PrintConfirmDialog(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.Print, contentDescription = null, tint = Color.White)
+                        Icon(confirmIcon, contentDescription = null, tint = Color.White)
                         Spacer(Modifier.padding(start = 6.dp))
-                        Text(stringResource(R.string.common_print), color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text(confirmLabel, color = Color.White, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }

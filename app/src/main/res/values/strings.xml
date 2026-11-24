@@ -53,6 +53,11 @@
     <string name="channel_close_title">Fermer ce canal ? / 关闭此购物车？</string>
     <string name="channel_close_body">Le panier \"%1$s\" sera perdu. / 购物车 \"%1$s\" 将被删除。</string>
     <string name="channel_back">Retour / 返回</string>
+    <string name="channel_select">Sélectionner / 选择</string>
+    <string name="channel_select_all">Tout / 全选</string>
+    <string name="channel_delete_selected">Supprimer (%1$d) / 删除</string>
+    <string name="channel_bulk_delete_title">Supprimer %1$d canal(aux) ? / 删除 %1$d 个购物车?</string>
+    <string name="channel_bulk_delete_body">Les paniers sélectionnés seront supprimés définitivement, sur tous les PDA. / 所选购物车将在所有 PDA 上被永久删除。</string>
 
     <!-- Remise -->
     <string name="discount_button">Remise / 折扣</string>
@@ -141,6 +146,11 @@
     <string name="export_json_sub">Brut / 原始</string>
     <string name="export_sage">Sage 50</string>
     <string name="export_sage_sub">Facture / 发票</string>
+    <string name="export_pdf">Ticket PDF</string>
+    <string name="export_pdf_sub">Ticket de caisse / 小票</string>
+    <string name="pdf_confirm_title">Ticket en PDF sur le PC ? / 导出小票 PDF？</string>
+    <string name="pdf_confirm_body">Le ticket sera enregistré en PDF dans le dossier d\'export du PC. / 小票将以 PDF 格式保存到电脑的导出文件夹。</string>
+    <string name="pdf_confirm_button">Exporter / 导出</string>
     <string name="export_error_title">Export impossible / 无法导出</string>
 
     <!-- Dialog impression -->

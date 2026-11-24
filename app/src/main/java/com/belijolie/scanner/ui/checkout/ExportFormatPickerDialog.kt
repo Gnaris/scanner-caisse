@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.Icon
@@ -44,7 +45,8 @@ import com.belijolie.scanner.export.ExportFormat
 @Composable
 fun ExportFormatPickerDialog(
     onDismiss: () -> Unit,
-    onPick: (ExportFormat) -> Unit
+    onPick: (ExportFormat) -> Unit,
+    onPickPdf: () -> Unit,
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -94,6 +96,21 @@ fun ExportFormatPickerDialog(
                         tint = Color(0xFFF59E0B), // amber
                         modifier = Modifier.weight(1f),
                         onClick = { onPick(ExportFormat.JSON) }
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                // 2 × 2 : 4 cartes côte à côte seraient trop étroites sur le PDA
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    ExportCard(
+                        label = stringResource(R.string.export_pdf),
+                        subLabel = stringResource(R.string.export_pdf_sub),
+                        icon = Icons.Default.PictureAsPdf,
+                        tint = Color(0xFFEF4444), // red
+                        modifier = Modifier.weight(1f),
+                        onClick = onPickPdf
                     )
                     ExportCard(
                         label = stringResource(R.string.export_sage),

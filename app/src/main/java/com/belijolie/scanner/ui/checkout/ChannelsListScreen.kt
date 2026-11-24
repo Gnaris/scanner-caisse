@@ -1,7 +1,15 @@
 package com.belijolie.scanner.ui.checkout
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.foundation.layout.Arrangement
@@ -77,6 +85,19 @@ fun ChannelsListScreen(
     // autre onglet si l'utilisateur touchait la bottom bar entre deux clics).
     var isCreating by remember { mutableStateOf(false) }
 
+    // Mode sélection multiple (suppression de plusieurs canaux d'un coup).
+    // Entrée : bouton « Sélectionner » ou appui long sur une carte.
+    var selecting by remember { mutableStateOf(false) }
+    var selected by remember { mutableStateOf(setOf<String>()) }
+    var confirmBulkDelete by remember { mutableStateOf(false) }
+    // Oublie les canaux disparus (supprimés ici ou sur un autre PDA)
+    LaunchedEffect(state.channels) {
+        val ids = state.channels.map { it.id }.toSet()
+        selected = selected intersect ids
+        if (ids.isEmpty()) selecting = false
+    }
+    BackHandler(enabled = selecting) { selecting = false; selected = emptySet() }
+
     LaunchedEffect(Unit) { vm.clearActiveChannel() }
 
     Column(
@@ -114,6 +135,38 @@ fun ChannelsListScreen(
             }
         }
 
+        if (selecting) {
+            // Barre de sélection : remplace le bouton « Créer un canal »
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .height(48.dp),
+            ) {
+                IconButton(onClick = { selecting = false; selected = emptySet() }) {
+                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.common_cancel), tint = Color(0xFF374151))
+                }
+                TextButton(onClick = {
+                    val all = state.channels.map { it.id }.toSet()
+                    selected = if (selected == all) emptySet() else all
+                }) { Text(stringResource(R.string.channel_select_all)) }
+                Spacer(Modifier.weight(1f))
+                Button(
+                    onClick = { confirmBulkDelete = true },
+                    enabled = selected.isNotEmpty(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                ) {
+                    Text(
+                        stringResource(R.string.channel_delete_selected, selected.size),
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        } else Row(verticalAlignment = Alignment.CenterVertically) {
         Button(
             onClick = {
                 if (isCreating) return@Button
@@ -131,8 +184,8 @@ fun ChannelsListScreen(
             shape = RoundedCornerShape(10.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .weight(1f)
+                .padding(start = 12.dp, end = 6.dp, top = 10.dp, bottom = 10.dp)
                 .height(48.dp),
         ) {
             Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
@@ -143,6 +196,19 @@ fun ChannelsListScreen(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 15.sp,
             )
+        }
+        if (state.channels.isNotEmpty()) {
+            OutlinedButton(
+                onClick = { selecting = true },
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp),
+                modifier = Modifier
+                    .padding(end = 12.dp)
+                    .height(48.dp),
+            ) {
+                Icon(Icons.Default.Checklist, contentDescription = stringResource(R.string.channel_select), modifier = Modifier.size(22.dp))
+            }
+        }
         }
 
         if (state.channels.isEmpty()) {
@@ -164,7 +230,17 @@ fun ChannelsListScreen(
                 items(state.channels, key = { it.id }) { ch ->
                     ChannelCard(
                         channel = ch,
-                        onOpen = { onOpenChannel(ch.id) },
+                        selecting = selecting,
+                        selected = ch.id in selected,
+                        onOpen = {
+                            if (selecting) {
+                                selected = if (ch.id in selected) selected - ch.id else selected + ch.id
+                            } else onOpenChannel(ch.id)
+                        },
+                        onLongPress = {
+                            selecting = true
+                            selected = selected + ch.id
+                        },
                         onRename = { channelToRename = ch },
                         // Confirmation obligatoire, même si le canal est vide :
                         // la suppression est définitive et un tap accidentel
@@ -201,6 +277,28 @@ fun ChannelsListScreen(
         )
     }
 
+    if (confirmBulkDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmBulkDelete = false },
+            title = { Text(stringResource(R.string.channel_bulk_delete_title, selected.size)) },
+            text = { Text(stringResource(R.string.channel_bulk_delete_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.closeChannels(selected)
+                        confirmBulkDelete = false
+                        selecting = false
+                        selected = emptySet()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFDC2626)),
+                ) { Text(stringResource(R.string.common_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmBulkDelete = false }) { Text(stringResource(R.string.common_cancel)) }
+            },
+        )
+    }
+
     channelToClose?.let { channel ->
         AlertDialog(
             onDismissRequest = { channelToClose = null },
@@ -220,9 +318,13 @@ fun ChannelsListScreen(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun ChannelCard(
     channel: Channel,
+    selecting: Boolean,
+    selected: Boolean,
     onOpen: () -> Unit,
+    onLongPress: () -> Unit,
     onRename: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -239,11 +341,19 @@ private fun ChannelCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color.White)
-            .clickable(onClick = onOpen)
+            .background(if (selected) Color(0xFFFEE2E2) else Color.White)
+            .combinedClickable(onClick = onOpen, onLongClick = onLongPress)
             .padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (selecting) {
+            Checkbox(
+                checked = selected,
+                onCheckedChange = { onOpen() },
+                colors = CheckboxDefaults.colors(checkedColor = Color(0xFFDC2626)),
+                modifier = Modifier.padding(end = 6.dp),
+            )
+        }
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -280,6 +390,8 @@ private fun ChannelCard(
                 color = Color(0xFF6B7280),
             )
         }
+        // En mode sélection : pas de boutons modifier / supprimer par carte
+        if (selecting) return@Row
         // Hitbox "modifier" : clickable isolé, consomme son tap.
         Box(
             modifier = Modifier

@@ -97,12 +97,18 @@ class ChannelsRepository(
         dao.save(ch.copy(name = newName))
     }
 
-    suspend fun closeChannel(channelId: String) {
+    suspend fun closeChannel(channelId: String) = closeChannels(setOf(channelId))
+
+    /** Supprime plusieurs canaux (et leurs paniers) en une seule transaction. */
+    suspend fun closeChannels(channelIds: Collection<String>) {
+        if (channelIds.isEmpty()) return
         db.withTransaction {
-            dao.softDeleteLinesOfChannel(channelId)
-            dao.softDelete(channelId)
+            for (id in channelIds) {
+                dao.softDeleteLinesOfChannel(id)
+                dao.softDelete(id)
+            }
         }
-        if (activeChannelId.value == channelId) activeChannelId.value = null
+        if (activeChannelId.value in channelIds) activeChannelId.value = null
     }
 
     suspend fun addProductToActive(

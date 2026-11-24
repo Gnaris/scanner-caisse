@@ -432,6 +432,33 @@ class CheckoutViewModel(
         viewModelScope.launch { channelsRepo.closeChannel(id) }
     }
 
+    /** Ticket de caisse en PDF envoyé au PC (dossier d'export du pc-listener). */
+    fun exportTicketPdf(id: String, lang: TicketLang) {
+        viewModelScope.launch {
+            val ctx = ScannerApp.instance.applicationContext
+            val channel = channelsRepo.current().channels.firstOrNull { it.id == id } ?: return@launch
+            if (channel.lines.isEmpty()) {
+                _exportResult.value = PrintResult(false, ctx.getString(R.string.checkout_cart_empty))
+                return@launch
+            }
+            val settings: AppSettings = settingsStore.settings.first()
+            _isExporting.value = true
+            val result = ChannelExporter.exportTicketPdf(settings, channel, lang)
+            _isExporting.value = false
+            result.onSuccess { success ->
+                val name = (success as? com.belijolie.scanner.export.ExportSuccess.File)?.filename.orEmpty()
+                _exportResult.value = PrintResult(true, ctx.getString(R.string.checkout_export_sent, name))
+            }.onFailure { e ->
+                _exportResult.value = PrintResult(false, e.toHumanMessage(ctx))
+            }
+        }
+    }
+
+    /** Suppression groupée depuis le mode sélection de la liste des canaux. */
+    fun closeChannels(ids: Set<String>) {
+        viewModelScope.launch { channelsRepo.closeChannels(ids) }
+    }
+
     fun removeLine(key: String) {
         viewModelScope.launch { channelsRepo.removeLineFromActive(key) }
     }

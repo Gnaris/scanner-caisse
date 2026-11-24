@@ -98,26 +98,54 @@ object ChannelExporter {
             ExportFormat.SAGE -> error("SAGE handled above")
         }
 
-        runCatching {
-            val url = URL(
-                settings.exportUrl + delimiterForQuery(settings.exportUrl)
-                    + "filename=" + URLEncoder.encode(filename, "UTF-8")
+        runCatching { postFile(settings, filename, payload, contentType) }
+    }
+
+    /**
+     * Ticket de caisse en PDF (même mise en page que le ticket imprimé, voir
+     * TicketPdf), envoyé au pc-listener qui le range dans le dossier d'export.
+     * Comme le ticket imprimé, il tient compte de la remise du canal.
+     */
+    suspend fun exportTicketPdf(
+        settings: AppSettings,
+        channel: Channel,
+        lang: com.belijolie.scanner.printer.TicketLang,
+    ): Result<ExportSuccess> = withContext(Dispatchers.IO) {
+        if (settings.exportUrl.isBlank()) {
+            return@withContext Result.failure(
+                IllegalStateException("Configure l'URL d'export dans les paramètres")
             )
-            val conn = url.openConnection() as HttpURLConnection
-            try {
-                conn.requestMethod = "POST"
-                conn.doOutput = true
-                conn.connectTimeout = TIMEOUT_MS
-                conn.readTimeout = TIMEOUT_MS
-                conn.setRequestProperty("Content-Type", contentType)
-                conn.setRequestProperty("X-Filename", filename)
-                conn.outputStream.use { it.write(payload) }
-                val code = conn.responseCode
-                if (code !in 200..299) throw IOException("HTTP $code")
-                ExportSuccess.File(filename)
-            } finally {
-                conn.disconnect()
-            }
+        }
+        runCatching {
+            val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.FRANCE).format(Date())
+            val safeName = channel.name.replace(Regex("[^A-Za-z0-9_-]"), "_").ifBlank { "canal" }
+            val filename = "ticket-$safeName-$timestamp.pdf"
+            val pdf = com.belijolie.scanner.printer.TicketPdf.render(
+                settings, sortLines(channel.lines), lang, channel.discountPercent,
+            )
+            postFile(settings, filename, pdf, "application/pdf")
+        }
+    }
+
+    private fun postFile(settings: AppSettings, filename: String, payload: ByteArray, contentType: String): ExportSuccess {
+        val url = URL(
+            settings.exportUrl + delimiterForQuery(settings.exportUrl)
+                + "filename=" + URLEncoder.encode(filename, "UTF-8")
+        )
+        val conn = url.openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.connectTimeout = TIMEOUT_MS
+            conn.readTimeout = TIMEOUT_MS
+            conn.setRequestProperty("Content-Type", contentType)
+            conn.setRequestProperty("X-Filename", filename)
+            conn.outputStream.use { it.write(payload) }
+            val code = conn.responseCode
+            if (code !in 200..299) throw IOException("HTTP $code")
+            return ExportSuccess.File(filename)
+        } finally {
+            conn.disconnect()
         }
     }
 
