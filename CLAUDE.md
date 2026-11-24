@@ -478,6 +478,14 @@ rester simple sur ce PDA unique).
   `aliases` (remap renvoyé à l'appareil, la ligne existante garde ses
   valeurs, le doublon complète les champs vides) ; suppressions douces ;
   enregistrement invalide refusé sans bloquer le reste.
+- **Page web d'admin (lecture seule)** : `https://caisse.beliandjolie.com/`
+  (`src/admin.html` + `src/admin.js`, données via `/admin/data.json`,
+  rafraîchie toutes les 15 s). Mot de passe HTTP Basic = `ADMIN_PASSWORD`
+  du `.env` VPS (identifiant libre), blocage 15 min après 8 échecs par IP.
+  Onglets : PDA (à jour / en retard selon la dernière version reçue),
+  caisses & canaux, produits, catégories, paramètres. Les PDA s'identifient
+  par les en-têtes `X-Install-Id`, `X-Device-Id`, `X-App-Version` (app ≥
+  1.1.1) → table `clients`.
 - **Déployer** : `cd server && bash deploy/deploy.sh` (envoie le code, lance
   les tests sur le VPS, migre, `pm2 startOrReload` du seul process
   scanner-caisse, health check).

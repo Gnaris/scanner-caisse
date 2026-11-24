@@ -15,6 +15,7 @@ const pool = createPool({ database: DB });
 before(async () => migrate(pool));
 beforeEach(async () => {
   for (const e of ENTITIES) await pool.query(`TRUNCATE TABLE ${e.table}`);
+  await pool.query("TRUNCATE TABLE clients");
   await pool.query('TRUNCATE TABLE aliases');
   await pool.query('UPDATE sync_state SET version = 0 WHERE id = 1');
 });
@@ -149,5 +150,34 @@ test('HTTP : clé obligatoire', async () => {
   assert.equal(bad.statusCode, 400);
   const pl = await app.inject({ method: 'GET', url: '/v1/sync/pull?since=0', headers: auth });
   assert.equal(pl.json().changes.categories[0].id, 'c1');
+  await app.close();
+});
+
+test('page admin : mot de passe obligatoire, PDA suivis', async () => {
+  const app = buildApp({ pool: createPool({ database: DB }), apiKey: 'k'.repeat(40), adminPassword: 'secret-admin', logger: false });
+  const basic = (p) => ({ authorization: 'Basic ' + Buffer.from('admin:' + p).toString('base64') });
+  assert.equal((await app.inject({ method: 'GET', url: '/' })).statusCode, 401);
+  assert.equal((await app.inject({ method: 'GET', url: '/admin/data.json', headers: basic('faux') })).statusCode, 401);
+  // La clé des PDA n'ouvre pas la page d'admin
+  assert.equal((await app.inject({ method: 'GET', url: '/', headers: { authorization: 'Bearer ' + 'k'.repeat(40) } })).statusCode, 401);
+  const page = await app.inject({ method: 'GET', url: '/', headers: basic('secret-admin') });
+  assert.equal(page.statusCode, 200);
+  assert.match(page.body, /données centrales/);
+
+  // Un PDA qui envoie puis reçoit est suivi comme « à jour »
+  const pda = { authorization: 'Bearer ' + 'k'.repeat(40), 'x-install-id': 'install-1', 'x-device-id': 'd1', 'x-app-version': '1.1.1' };
+  await app.inject({
+    method: 'POST', url: '/v1/sync/push', headers: pda,
+    payload: { origin: 'install-1', changes: { devices: [{ id: 'd1', name: 'Appareil 1', updatedAt: 1 }], categories: [cat('c1', 'Bague')] } },
+  });
+  await app.inject({ method: 'GET', url: '/v1/sync/pull?since=0', headers: pda });
+  const data = (await app.inject({ method: 'GET', url: '/admin/data.json', headers: basic('secret-admin') })).json();
+  assert.equal(data.serverVersion, 2);
+  assert.equal(data.clients.length, 1);
+  assert.equal(data.clients[0].deviceName, 'Appareil 1');
+  assert.equal(data.clients[0].lastPullVersion, 2);
+  assert.equal(data.clients[0].appVersion, '1.1.1');
+  assert.equal(data.devices[0].name, 'Appareil 1');
+  assert.equal(data.categories[0].by, data.clients[0].label);
   await app.close();
 });

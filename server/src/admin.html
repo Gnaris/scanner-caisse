@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Caisse Beli &amp; Jolie — Données centrales</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --ink: #111827; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #4f46e5; --ok: #15803d; --ok-bg: #dcfce7; --warn: #b45309; --warn-bg: #fef3c7;
+    --off: #4b5563; --off-bg: #e5e7eb; --bad: #b91c1c; --bad-bg: #fee2e2;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+  header { background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 20px; }
+  .top { display: flex; align-items: center; gap: 16px; padding: 14px 0; flex-wrap: wrap; }
+  .top h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  .top .meta { color: var(--muted); font-size: 12.5px; margin-left: auto; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: #c7c9d1; }
+  nav { display: flex; gap: 4px; }
+  nav button { border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 10px 12px; color: var(--muted); background: none; }
+  nav button.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  main { padding: 20px 0 60px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .stat b { display: block; font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 12.5px; }
+  section.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 16px; overflow: hidden; }
+  section.card > h2 { font-size: 14px; margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; }
+  section.card > h2 small { color: var(--muted); font-weight: 400; }
+  .hint { color: var(--muted); font-size: 12.5px; padding: 10px 16px 0; margin: 0; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; background: #fafafa; }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
+  .muted { color: var(--muted); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .b-ok { color: var(--ok); background: var(--ok-bg); }
+  .b-warn { color: var(--warn); background: var(--warn-bg); }
+  .b-off { color: var(--off); background: var(--off-bg); }
+  .b-bad { color: var(--bad); background: var(--bad-bg); }
+  .empty { padding: 18px 16px; color: var(--muted); }
+  .chan { border-top: 1px solid var(--line); }
+  .chan summary { list-style: none; cursor: pointer; padding: 10px 16px; display: flex; gap: 12px; align-items: center; }
+  .chan summary::-webkit-details-marker { display: none; }
+  .chan summary::before { content: "▸"; color: var(--muted); width: 10px; }
+  .chan[open] summary::before { content: "▾"; }
+  .chan summary .name { font-weight: 600; }
+  .chan summary .right { margin-left: auto; display: flex; gap: 16px; align-items: center; font-variant-numeric: tabular-nums; }
+  .chan table { background: #fcfcfd; }
+  input[type=search] { font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; width: min(320px, 100%); }
+  .toolbar { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  #error { display: none; margin: 16px 0; padding: 12px 16px; border-radius: 10px; background: var(--bad-bg); color: var(--bad); }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="top">
+      <h1>Caisse Beli &amp; Jolie — données centrales</h1>
+      <div class="meta">
+        <span id="version"></span>
+        <span id="refreshed"></span>
+        <button id="refresh" type="button">Actualiser</button>
+      </div>
+    </div>
+    <nav id="tabs">
+      <button data-tab="overview" class="on">Vue d'ensemble</button>
+      <button data-tab="devices">Caisses &amp; canaux</button>
+      <button data-tab="products">Produits</button>
+      <button data-tab="categories">Catégories</button>
+      <button data-tab="settings">Paramètres</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="error"></div>
+
+  <div data-panel="overview">
+    <div class="stats" id="stats"></div>
+    <section class="card">
+      <h2>PDA <small>appareils physiques qui ont contacté le serveur</small></h2>
+      <p class="hint">« À jour » = le PDA a déjà récupéré toutes les données du serveur. Les PDA se synchronisent toutes les 30 secondes quand ils sont allumés et en Wi-Fi.</p>
+      <div id="clients"></div>
+    </section>
+  </div>
+
+  <div data-panel="devices" class="hidden"><div id="devices"></div></div>
+
+  <div data-panel="products" class="hidden">
+    <section class="card">
+      <div class="toolbar">
+        <input type="search" id="productSearch" placeholder="Rechercher un code-barres ou une catégorie…">
+        <span class="muted" id="productCount"></span>
+      </div>
+      <div id="products"></div>
+    </section>
+  </div>
+
+  <div data-panel="categories" class="hidden"><section class="card"><div id="categories"></div></section></div>
+  <div data-panel="settings" class="hidden"><section class="card"><div id="settings"></div></section></div>
+</main>
+
+<script>
+(() => {
+  const REFRESH_MS = 15000;
+  let data = null;
+
+  const euro = (cents) => (cents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+  const ttc = (cents) => Math.round(cents * 1.2);
+  const dt = (v) => {
+    if (!v) return '—';
+    const d = new Date(v);
+    return d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+  const ago = (v) => {
+    if (!v) return 'jamais';
+    const s = Math.max(0, Math.round((Date.now() - new Date(v).getTime()) / 1000));
+    if (s < 60) return `il y a ${s} s`;
+    const m = Math.round(s / 60);
+    if (m < 60) return `il y a ${m} min`;
+    const h = Math.round(m / 60);
+    if (h < 48) return `il y a ${h} h`;
+    return `il y a ${Math.round(h / 24)} j`;
+  };
+
+  // Construction DOM sans innerHTML pour les données (elles viennent des PDA)
+  function el(tag, props = {}, ...children) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === 'class') n.className = v;
+      else if (k === 'text') n.textContent = v;
+      else n.setAttribute(k, v);
+    }
+    for (const c of children.flat()) if (c !== null && c !== undefined) n.append(c instanceof Node ? c : document.createTextNode(String(c)));
+    return n;
+  }
+  const badge = (text, kind) => el('span', { class: `badge b-${kind}`, text });
+
+  function table(headers, rows) {
+    if (!rows.length) return el('div', { class: 'empty', text: 'Aucune donnée.' });
+    return el('table', {},
+      el('thead', {}, el('tr', {}, headers.map((h) => el('th', { class: h.num ? 'num' : '', text: h.label })))),
+      el('tbody', {}, rows.map((cells) => el('tr', {}, cells.map((c, i) =>
+        el('td', { class: headers[i].num ? 'num' : (headers[i].mono ? 'mono' : '') }, c ?? '—'))))));
+  }
+
+  function renderOverview() {
+    const chans = data.devices.reduce((s, d) => s + d.channels.length, 0);
+    const stats = [
+      [data.devices.length, 'Caisses'],
+      [chans, 'Canaux ouverts'],
+      [data.products.length, 'Produits'],
+      [data.categories.length, 'Catégories'],
+      [data.clients.length, 'PDA connus'],
+    ];
+    document.getElementById('stats').replaceChildren(...stats.map(([n, l]) => el('div', { class: 'stat' }, el('b', { text: n.toLocaleString('fr-FR') }), el('span', { text: l }))));
+
+    const rows = data.clients.map((c) => {
+      const online = c.lastSeen && Date.now() - new Date(c.lastSeen).getTime() < 2 * 60 * 1000;
+      let state;
+      if (c.lastPullVersion === null) state = badge('Jamais synchronisé', 'off');
+      else if (c.lastPullVersion >= data.serverVersion) state = badge('À jour', 'ok');
+      else state = badge(`En retard (${c.lastPullVersion} / ${data.serverVersion})`, 'warn');
+      return [
+        el('span', {}, el('b', { text: c.label }), ' ', online ? badge('en ligne', 'ok') : badge('pas de contact récent', 'off')),
+        c.deviceName ?? '—',
+        state,
+        el('span', { title: dt(c.lastSeen) }, ago(c.lastSeen)),
+        el('span', { title: dt(c.lastPullAt) }, ago(c.lastPullAt)),
+        el('span', { title: dt(c.lastPushAt) }, ago(c.lastPushAt)),
+        c.appVersion ?? '—',
+      ];
+    });
+    document.getElementById('clients').replaceChildren(table([
+      { label: 'PDA' }, { label: 'Caisse ouverte' }, { label: 'Données' }, { label: 'Dernier contact' },
+      { label: 'Dernière réception' }, { label: 'Dernier envoi' }, { label: 'Version app' },
+    ], rows));
+  }
+
+  function renderDevices() {
+    const root = document.getElementById('devices');
+    if (!data.devices.length) {
+      root.replaceChildren(el('section', { class: 'card' }, el('div', { class: 'empty', text: 'Aucune caisse.' })));
+      return;
+    }
+    // Garde les canaux dépliés d'un rafraîchissement à l'autre
+    const open = new Set([...root.querySelectorAll('details[open]')].map((d) => d.dataset.key));
+    root.replaceChildren(...data.devices.map((d) => el('section', { class: 'card' },
+      el('h2', {}, d.name, el('small', { text: `${d.channels.length} canal${d.channels.length > 1 ? 'aux' : ''} ouvert${d.channels.length > 1 ? 's' : ''}` })),
+      d.channels.length ? d.channels.map((c) => {
+        const key = d.name + '/' + c.name + '/' + c.createdAt;
+        const after = c.totalCents - Math.round(c.totalCents * c.discountPercent / 100);
+        const det = el('details', { class: 'chan', 'data-key': key },
+          el('summary', {},
+            el('span', { class: 'name', text: c.name }),
+            c.discountPercent ? badge(`-${c.discountPercent} %`, 'ok') : null,
+            el('span', { class: 'right' },
+              el('span', { class: 'muted', text: `${c.articles} article${c.articles > 1 ? 's' : ''}` }),
+              el('span', { text: `${euro(after)} HT` }),
+              el('b', { text: `${euro(ttc(after))} TTC` }))),
+          table([{ label: 'Catégorie' }, { label: 'Qté', num: true }, { label: 'P.U. HT', num: true }, { label: 'Total HT', num: true }],
+            c.lines.map((l) => [l.categoryName, `x${l.quantity}`, euro(l.unitPriceCents), euro(l.unitPriceCents * l.quantity)])));
+        if (open.has(key)) det.open = true;
+        return det;
+      }) : el('div', { class: 'empty', text: 'Aucun canal ouvert.' }))));
+  }
+
+  function renderProducts() {
+    const term = document.getElementById('productSearch').value.trim().toLowerCase();
+    const list = data.products.filter((p) => !term
+      || p.barcode.toLowerCase().includes(term)
+      || (p.categoryName ?? '').toLowerCase().includes(term));
+    document.getElementById('productCount').textContent =
+      `${list.length.toLocaleString('fr-FR')} produit${list.length > 1 ? 's' : ''}`;
+    const shown = list.slice(0, 1000);
+    const t = table(
+      [{ label: 'Code-barres', mono: true }, { label: 'Catégorie' }, { label: 'Prix HT', num: true }, { label: 'Prix TTC', num: true }, { label: 'Nom EN' }, { label: 'Reçu par le serveur' }, { label: 'Par' }],
+      shown.map((p) => [p.barcode, p.categoryName ?? '—', euro(p.priceCents), euro(ttc(p.priceCents)), p.nameEn ?? '—', dt(p.receivedAt), p.by ?? '—']));
+    const extra = list.length > shown.length
+      ? el('div', { class: 'empty', text: `… ${list.length - shown.length} autres, affinez la recherche.` }) : null;
+    document.getElementById('products').replaceChildren(t, ...(extra ? [extra] : []));
+  }
+
+  function renderCategories() {
+    document.getElementById('categories').replaceChildren(table(
+      [{ label: 'Catégorie' }, { label: 'Nom EN' }, { label: 'Code Sage', mono: true }, { label: 'Préfixe code-barres', mono: true }, { label: 'Produits', num: true }, { label: 'Reçu par le serveur' }, { label: 'Par' }],
+      data.categories.map((c) => [c.name, c.nameEn ?? '—', c.sageArticleCode ?? '—', c.barcodePrefix ?? '—', c.productCount, dt(c.receivedAt), c.by ?? '—'])));
+  }
+
+  const SETTING_LABELS = {
+    shop_name: 'Nom du commerce', address: 'Adresse', address_complement: "Complément d'adresse",
+    postal_code: 'Code postal', city: 'Ville', country: 'Pays', microstore_qr: 'QR Microstore',
+    microstore_code: 'Code Microstore', website_url: 'Site web', google_review_url: 'Lien avis Google',
+    sage_manual_article: 'Code article Sage (produits manuels)',
+  };
+  function renderSettings() {
+    document.getElementById('settings').replaceChildren(
+      el('p', { class: 'hint', text: "Paramètres communs à tous les PDA. L'imprimante et le scanner sont réglés sur chaque PDA et n'apparaissent pas ici. Un paramètre jamais modifié garde sa valeur par défaut et n'est pas listé." }),
+      table([{ label: 'Paramètre' }, { label: 'Valeur' }, { label: 'Modifié le' }],
+        data.settings.map((s) => [SETTING_LABELS[s.key] ?? s.key, s.value || '—', dt(s.receivedAt)])));
+  }
+
+  function render() {
+    document.getElementById('version').textContent = `Version des données : ${data.serverVersion.toLocaleString('fr-FR')}`;
+    document.getElementById('refreshed').textContent = `Actualisé à ${new Date(data.generatedAt).toLocaleTimeString('fr-FR')}`;
+    renderOverview();
+    renderDevices();
+    renderProducts();
+    renderCategories();
+    renderSettings();
+  }
+
+  async function load() {
+    const err = document.getElementById('error');
+    try {
+      const res = await fetch('/admin/data.json', { cache: 'no-store', credentials: 'same-origin' });
+      if (!res.ok) throw new Error(`Erreur ${res.status}`);
+      data = await res.json();
+      err.style.display = 'none';
+      render();
+    } catch (e) {
+      err.textContent = `Impossible de charger les données (${e.message}). Nouvel essai automatique dans 15 secondes.`;
+      err.style.display = 'block';
+    }
+  }
+
+  document.getElementById('tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-tab]');
+    if (!b) return;
+    document.querySelectorAll('#tabs button').forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('[data-panel]').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== b.dataset.tab));
+  });
+  document.getElementById('refresh').addEventListener('click', load);
+  document.getElementById('productSearch').addEventListener('input', () => data && renderProducts());
+
+  load();
+  setInterval(load, REFRESH_MS);
+})();
+</script>
+</body>
+</html>

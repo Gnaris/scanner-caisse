@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.withTransaction
+import com.belijolie.scanner.BuildConfig
 import com.belijolie.scanner.data.AppDatabase
 import com.belijolie.scanner.data.DeviceSession
 import com.belijolie.scanner.util.isNetworkConnected
@@ -77,6 +78,8 @@ class SyncEngine(
 
     private val tables = syncTables(db)
     private val mutex = Mutex()
+    /** En-têtes d'identification envoyés avec chaque requête (posés dans sync()). */
+    @Volatile private var identity: Map<String, String> = emptyMap()
     private lateinit var scope: CoroutineScope
 
     private val _status = MutableStateFlow<SyncStatus>(SyncStatus.NotConfigured)
@@ -156,6 +159,12 @@ class SyncEngine(
         }
         if (_status.value !is SyncStatus.Synced) _status.value = SyncStatus.Syncing
         try {
+            // Identifie ce PDA auprès du serveur (page d'admin : qui est à jour ?)
+            identity = mapOf(
+                "X-Install-Id" to session.installId(),
+                "X-Device-Id" to (session.currentDeviceId.first() ?: ""),
+                "X-App-Version" to BuildConfig.VERSION_NAME,
+            ).filterValues { it.isNotEmpty() }
             withContext(Dispatchers.IO) {
                 push(cfg)
                 pull(cfg)
@@ -274,6 +283,7 @@ class SyncEngine(
             conn.readTimeout = 45_000
             conn.setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
             conn.setRequestProperty("Accept", "application/json")
+            identity.forEach { (k, v) -> conn.setRequestProperty(k, v) }
             if (body != null) {
                 conn.doOutput = true
                 conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")

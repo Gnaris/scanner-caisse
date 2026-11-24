@@ -31,6 +31,18 @@ export function schemaStatements() {
        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
        PRIMARY KEY (entity, from_id)
      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
+    // PDA physiques qui ont contacté le serveur (page d'admin : qui est à jour ?)
+    `CREATE TABLE IF NOT EXISTS clients (
+       install_id VARCHAR(64) NOT NULL PRIMARY KEY,
+       device_id VARCHAR(64) NULL,
+       app_version VARCHAR(32) NULL,
+       ip VARCHAR(64) NULL,
+       first_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       last_seen TIMESTAMP NULL,
+       last_pull_at TIMESTAMP NULL,
+       last_pull_version BIGINT UNSIGNED NULL,
+       last_push_at TIMESTAMP NULL
+     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`,
   ];
   for (const e of ENTITIES) {
     const cols = Object.entries(e.fields).map(([f, def]) => `${toColumn(f)} ${columnSql(def)}`);
