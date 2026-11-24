@@ -133,6 +133,10 @@ export/
                            manquants. Return type : sealed ExportSuccess { File,
                            SageInvoice(numero) } pour que le ViewModel choisisse
                            la bonne string de confirmation.
+                         - exportTicketPdf(settings, channel, lang) : ticket PDF
+                           (TicketPdf, remise incluse comme le ticket imprimé)
+                           POSTé au même endpoint /export du pc-listener
+                           (ticket-<canal>-<date>.pdf) — aucun changement côté PC.
 util/
   NetworkErrors.kt       Throwable.toHumanMessage(ctx) : message FR humain selon
                          type d'exception (UnknownHostException, ConnectException…)
