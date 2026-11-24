@@ -228,7 +228,9 @@ test('page admin : créer / modifier / supprimer', async () => {
   assert.equal(pulled.changes.products.find((x) => x.id === prodId).priceCents, 1500);
 
   assert.equal((await del(`/admin/api/channels/${chId}`)).statusCode, 200);
-  assert.equal((await del(`/admin/api/products/${prodId}`)).statusCode, 200);
+  // Comme le navigateur : DELETE avec Content-Type JSON et sans corps
+  const delJson = await app.inject({ method: 'DELETE', url: `/admin/api/products/${prodId}`, headers: { ...h, 'content-type': 'application/json' } });
+  assert.equal(delJson.statusCode, 200, delJson.body);
   assert.equal((await del(`/admin/api/categories/${catId}`)).statusCode, 200);
   const after = (await app.inject({ method: 'GET', url: '/admin/data.json', headers: h })).json();
   assert.equal(after.products.length, 0);

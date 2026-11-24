@@ -14,6 +14,18 @@ export function buildApp({ pool, apiKey, adminPassword, logger = true }) {
   if (!apiKey || apiKey.length < 32) throw new Error('API_KEY absente ou trop courte (32 caractères min)');
   const app = Fastify({ logger, bodyLimit: 10 * 1024 * 1024 });
 
+  // JSON vide accepté (ex. DELETE envoyé avec Content-Type: application/json
+  // par un navigateur) : Fastify le refuse par défaut (« Body cannot be empty »).
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    if (body === '') return done(null, {});
+    try {
+      done(null, JSON.parse(body));
+    } catch (err) {
+      err.statusCode = 400;
+      done(err);
+    }
+  });
+
   app.get('/v1/health', async () => ({ ok: true }));
 
   // API des PDA : clé Bearer obligatoire. La page d'admin (/ et /admin/*)
