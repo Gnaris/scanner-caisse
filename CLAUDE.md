@@ -304,6 +304,20 @@ res/
 - Les bitmaps QR du bas de ticket sont rendus à `WIDTH_PX = 576` (= largeur
   imprimable réelle) et insérés via `[C]<img>` → centrage pile symétrique.
   **Ne PAS passer à `[L]<img>`** : l'image serait décalée à gauche de 64 dots.
+- **Réseau de la boutique (constaté le 24/11/2026)** : box 192.168.1.254,
+  PC Sage 192.168.1.122. La MUNBYN est bien en **192.168.1.31:9100** (MAC
+  34-ea-e7-…, module Wi-Fi « Shanghai High-Flying », page web 401
+  « USER LOGIN » sans nom de modèle). Une **Brother MFC-L2710DW** (laser A4,
+  192.168.1.144) répond AUSSI sur le port 9100 → un scan « port 9100 ouvert »
+  ne suffit pas à reconnaître l'imprimante ticket (sa page web annonce
+  « Brother », c'est le seul indice lisible depuis Android, qui interdit de
+  lire les adresses MAC).
+- **La MUNBYN met son Wi-Fi en veille** quand elle ne sert pas : ping et
+  port 9100 ne répondent plus, puis elle se réveille après une tentative
+  d'impression. Explique les « le ticket ne sort pas » au premier essai
+  (réessayer suffit). Piste non retenue pour l'instant (décision cliente) :
+  bouton « Rechercher l'imprimante » + nouvel essai automatique à
+  l'impression.
 
 ## Conventions produit & ticket
 
