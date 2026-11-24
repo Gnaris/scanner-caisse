@@ -28,6 +28,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PictureAsPdf
+import com.belijolie.scanner.export.ExportFormat
+import androidx.compose.material.icons.filled.RemoveShoppingCart
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Delete
@@ -133,6 +135,7 @@ fun ChannelDetailScreen(
     var showCashPayment by remember { mutableStateOf(false) }
     var showExportFormat by remember { mutableStateOf(false) }
     var showPdfConfirm by remember { mutableStateOf(false) }
+    var showSageMode by remember { mutableStateOf(false) }
     var showDiscountDialog by remember { mutableStateOf(false) }
     var lineToRemove by remember { mutableStateOf<com.belijolie.scanner.cart.CartLine?>(null) }
     var lineToEdit by remember { mutableStateOf<com.belijolie.scanner.cart.CartLine?>(null) }
@@ -148,6 +151,7 @@ fun ChannelDetailScreen(
     ) {
 
         val scanMultiplier by vm.scanMultiplier.collectAsStateWithLifecycle()
+        val removeMode by vm.removeMode.collectAsStateWithLifecycle()
         var showMultiplierDialog by remember { mutableStateOf(false) }
 
         // Barre du haut : [← retour] [+ produit] [×1]
@@ -201,6 +205,46 @@ fun ChannelDetailScreen(
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
+                )
+            }
+            // Bascule Ajouter / Retirer : en mode retrait, chaque scan enlève
+            // l'article (× multiplicateur) du panier au lieu de l'ajouter.
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .background(
+                        if (removeMode) Color(0xFFDC2626) else Color(0xFFE5E7EB),
+                        RoundedCornerShape(6.dp)
+                    )
+                    .clickable { vm.toggleRemoveMode() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.RemoveShoppingCart,
+                    contentDescription = stringResource(R.string.checkout_remove_mode),
+                    tint = if (removeMode) Color.White else Color(0xFF374151),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+
+        if (removeMode) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 2.dp)
+                    .background(Color(0xFFFEE2E2), RoundedCornerShape(6.dp))
+                    .clickable { vm.toggleRemoveMode() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.RemoveShoppingCart, contentDescription = null, tint = Color(0xFFB91C1C), modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    stringResource(R.string.checkout_remove_mode_banner),
+                    color = Color(0xFFB91C1C),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
         }
@@ -474,11 +518,25 @@ fun ChannelDetailScreen(
             onDismiss = { showExportFormat = false },
             onPick = { format ->
                 showExportFormat = false
-                activeChannel?.let { vm.exportChannel(it.id, format) }
+                if (format == ExportFormat.SAGE) showSageMode = true
+                else activeChannel?.let { vm.exportChannel(it.id, format) }
             },
             onPickPdf = {
                 showExportFormat = false
                 showPdfConfirm = true
+            },
+        )
+    }
+
+    if (showSageMode) {
+        val sageInvoices by vm.sageInvoices.collectAsStateWithLifecycle()
+        SageModeDialog(
+            invoices = sageInvoices,
+            onLoadInvoices = vm::loadSageInvoices,
+            onDismiss = { showSageMode = false },
+            onConfirm = { mode, numero ->
+                showSageMode = false
+                activeChannel?.let { vm.exportChannel(it.id, ExportFormat.SAGE, mode, numero) }
             },
         )
     }

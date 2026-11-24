@@ -4,6 +4,7 @@
 import { readFile } from 'node:fs/promises';
 import { timingSafeEqual, createHash } from 'node:crypto';
 import { isValidId } from './entities.js';
+import { registerAdminWrites } from './admin-write.js';
 
 function sameSecret(a, b) {
   const ha = createHash('sha256').update(a).digest();
@@ -99,6 +100,8 @@ export function registerAdmin(app, { pool, adminPassword }) {
     reply.header('Cache-Control', 'no-store');
     return buildData(pool);
   });
+
+  registerAdminWrites(app, { pool, guard });
 }
 
 async function buildData(pool) {
@@ -121,7 +124,7 @@ async function buildData(pool) {
        FROM categories c WHERE c.deleted = 0 ORDER BY c.name`,
   );
   const products = await q(
-    `SELECT p.barcode, p.price_cents, p.name_en, p.server_updated_at, p.origin, c.name AS category_name
+    `SELECT p.id, p.category_id, p.barcode, p.price_cents, p.name_en, p.server_updated_at, p.origin, c.name AS category_name
        FROM products p LEFT JOIN categories c ON c.id = p.category_id
       WHERE p.deleted = 0 ORDER BY c.name, p.price_cents, p.barcode`,
   );
@@ -172,6 +175,7 @@ async function buildData(pool) {
         const grouped = groupLines(linesByChannel.get(c.id) ?? []);
         const totalCents = grouped.reduce((s, g) => s + g.unitPriceCents * g.quantity, 0);
         return {
+          id: c.id,
           name: c.name,
           discountPercent: Number(c.discount_percent),
           createdAt: Number(c.created_at),
@@ -181,9 +185,10 @@ async function buildData(pool) {
           lines: grouped,
         };
       });
-      return { name: d.name, createdBy: who(d.origin), channels: chans };
+      return { id: d.id, name: d.name, createdBy: who(d.origin), channels: chans };
     }),
     categories: categories.map((c) => ({
+      id: c.id,
       name: c.name,
       nameEn: c.name_en,
       sageArticleCode: c.sage_article_code,
@@ -193,6 +198,8 @@ async function buildData(pool) {
       by: who(c.origin),
     })),
     products: products.map((p) => ({
+      id: p.id,
+      categoryId: p.category_id,
       barcode: p.barcode,
       categoryName: p.category_name,
       priceCents: Number(p.price_cents),

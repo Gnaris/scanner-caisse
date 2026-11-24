@@ -114,7 +114,16 @@ printer/
                          gros titre + subtitle, +10px bottomMargin anti-coupure].
                          Alignement via [C]<img>.
 export/
+  PcListener.kt          Chemin vers Scanner Listener : d'abord l'URL export PC
+                         (Wi-Fi), sinon http://127.0.0.1:<port> (secours câble
+                         USB, tunnel adb ouvert par le Listener). Testé par
+                         GET /ping avant chaque export. PcUnreachableException
+                         = message prêt pour l'utilisateur.
   ChannelExporter.kt     Export via POST HTTP. enum ExportFormat { CSV, JSON, SAGE }.
+                         SAGE + enum SageMode { CREER, AJOUTER, REMPLACER } :
+                         AJOUTER / REMPLACER visent une facture provisoire
+                         choisie dans listProvisionalInvoices() (GET
+                         /sage-factures du Listener) — UI SageModeDialog.
                          - CSV : BOM UTF-8 + ; + virgule décimale (ouverture Excel
                            FR), POST vers settings.exportUrl avec ?filename=.
                          - JSON : idem CSV mais en JSON brut.
@@ -493,9 +502,16 @@ rester simple sur ce PDA unique).
   `aliases` (remap renvoyé à l'appareil, la ligne existante garde ses
   valeurs, le doublon complète les champs vides) ; suppressions douces ;
   enregistrement invalide refusé sans bloquer le reste.
-- **Page web d'admin (lecture seule)** : `https://caisse.beliandjolie.com/`
+- **Page web d'admin** : `https://caisse.beliandjolie.com/`
   (`src/admin.html` + `src/admin.js`, données via `/admin/data.json`,
-  rafraîchie toutes les 15 s). Mot de passe HTTP Basic = `ADMIN_PASSWORD`
+  rafraîchie toutes les 15 s sauf fenêtre de saisie ouverte). Création /
+  modification / suppression des produits, catégories, paramètres, canaux
+  et lignes de panier (`src/admin-write.js`, routes `/admin/api/*`) : chaque
+  écriture passe par `push()` avec l'origine `admin-web` (mêmes contrôles,
+  nouvelle version → les PDA la reçoivent à leur synchro). Doublon de nom /
+  code-barres = 409 explicite (pas de fusion silencieuse), catégorie
+  utilisée = suppression refusée. Anti-CSRF : en-tête
+  `X-Requested-With: fetch` obligatoire sur les écritures. Mot de passe HTTP Basic = `ADMIN_PASSWORD`
   du `.env` VPS (identifiant libre), blocage 15 min après 8 échecs par IP.
   Onglets : PDA (à jour / en retard selon la dernière version reçue),
   caisses & canaux, produits, catégories, paramètres. Les PDA s'identifient
@@ -540,7 +556,22 @@ pc-listener/
     loopback). Prend le JSON InvoiceRequest du PDA, le fait suivre tel quel,
     renvoie status + body SageBridge au PDA. Si SageBridge n'est pas lancé →
     HTTP 502 + `{"ok":false,"error":"SageBridge est injoignable sur ce PC."}`.
-    Timeout 150 s (SageBridge borne Sage à 120 s en interne).
+    Timeout 150 s (SageBridge borne Sage à 120 s en interne). Le JSON peut
+    porter `mode` (`creer` / `ajouter` / `remplacer`) + `numero` pour modifier
+    une facture PROVISOIRE existante (SageBridge ≥ 1.4.1).
+  - `GET /sage-factures` : factures provisoires (relais de SageBridge
+    `GET /factures`, filtrées `validee = false`, nature facture) pour le choix
+    « Ajouter / Remplacer » du PDA.
+  - `GET /ping` : `{ ok, app, version }` (test de joignabilité du PDA).
+- **Secours par câble USB** (`UsbBridge`) : toutes les 5 s, `adb devices`
+  puis `adb reverse tcp:PORT tcp:PORT` pour chaque PDA branché (débogage
+  USB activé + PC autorisé sur le PDA). Côté PDA, http://127.0.0.1:PORT mène
+  alors à ce logiciel ; l'app (`export/PcListener.kt`) s'en sert
+  automatiquement quand l'adresse Wi-Fi ne répond pas → Sage, Excel, JSON,
+  ticket PDF fonctionnent sans Wi-Fi. adb : SDK Android, PATH, sinon
+  téléchargé une fois (platform-tools Google) dans
+  `%LOCALAPPDATA%\ScannerListener\platform-tools`. Console masquée
+  (`CREATE_NO_WINDOW`).
 - Icône bleue "S" dans la zone de notification (pystray + icône générée Pillow)
 - Fenêtre Paramètres Tkinter (clic sur icône) : nom entreprise, port, dossier
   d'export, autostart Windows, IP locales affichées + section mise à jour
@@ -663,6 +694,11 @@ PyInstaller). Logs dans `%APPDATA%\ScannerListener\listener.log`.
   (= on est sur la liste des canaux, pas dans un détail) le scan est ignoré.
   Volontaire : l'utilisateur passe forcément par la liste → "Créer un canal"
   → détail. Un scan hors contexte ne doit alimenter aucun panier.
+- **Mode retrait au scan** : bouton panier barré dans la barre du haut du
+  canal (rouge + bandeau quand actif). Chaque scan retire « × multiplicateur »
+  de la ligne du produit, retrouvée par productId, puis code-barres, puis
+  (catégorie, prix) — la catégorie a pu être renommée depuis l'ajout. Absent
+  du panier → bip d'erreur + message.
 - **Remise de canal uniquement affichage + ticket** : `Channel.discountPercent`
   (0-100) touche l'écran de caisse (prix barrés + ligne "Remise -X%" verte)
   et le ticket imprimé (3 lignes totaux : HT brut, remise, HT remisé en gras ;

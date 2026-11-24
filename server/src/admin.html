@@ -18,8 +18,14 @@
   .top { display: flex; align-items: center; gap: 16px; padding: 14px 0; flex-wrap: wrap; }
   .top h1 { font-size: 17px; margin: 0; font-weight: 650; }
   .top .meta { color: var(--muted); font-size: 12.5px; margin-left: auto; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-  button { font: inherit; border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 6px 12px; cursor: pointer; color: var(--ink); }
   button:hover { border-color: #c7c9d1; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #4338ca; }
+  button.danger { color: var(--bad); }
+  button.danger:hover { border-color: #fca5a5; background: var(--bad-bg); }
+  button.sm { padding: 3px 9px; font-size: 12.5px; }
+  .actions { display: inline-flex; gap: 6px; white-space: nowrap; }
   nav { display: flex; gap: 4px; }
   nav button { border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 10px 12px; color: var(--muted); background: none; }
   nav button.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
@@ -31,32 +37,47 @@
   section.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 16px; overflow: hidden; }
   section.card > h2 { font-size: 14px; margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; }
   section.card > h2 small { color: var(--muted); font-weight: 400; }
+  section.card > h2 .grow { margin-left: auto; }
   .hint { color: var(--muted); font-size: 12.5px; padding: 10px 16px 0; margin: 0; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 8px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th, td { text-align: left; padding: 8px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
   th { font-size: 12px; color: var(--muted); font-weight: 600; background: #fafafa; }
   tr:last-child td { border-bottom: none; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.act, th.act { text-align: right; width: 1%; }
   .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
   .muted { color: var(--muted); }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
   .b-ok { color: var(--ok); background: var(--ok-bg); }
   .b-warn { color: var(--warn); background: var(--warn-bg); }
   .b-off { color: var(--off); background: var(--off-bg); }
-  .b-bad { color: var(--bad); background: var(--bad-bg); }
   .empty { padding: 18px 16px; color: var(--muted); }
   .chan { border-top: 1px solid var(--line); }
-  .chan summary { list-style: none; cursor: pointer; padding: 10px 16px; display: flex; gap: 12px; align-items: center; }
+  .chan summary { list-style: none; cursor: pointer; padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   .chan summary::-webkit-details-marker { display: none; }
   .chan summary::before { content: "▸"; color: var(--muted); width: 10px; }
   .chan[open] summary::before { content: "▾"; }
   .chan summary .name { font-weight: 600; }
-  .chan summary .right { margin-left: auto; display: flex; gap: 16px; align-items: center; font-variant-numeric: tabular-nums; }
+  .chan summary .right { margin-left: auto; display: flex; gap: 14px; align-items: center; font-variant-numeric: tabular-nums; }
   .chan table { background: #fcfcfd; }
   input[type=search] { font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; width: min(320px, 100%); }
-  .toolbar { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .toolbar { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .toolbar .grow { margin-left: auto; }
   #error { display: none; margin: 16px 0; padding: 12px 16px; border-radius: 10px; background: var(--bad-bg); color: var(--bad); }
   .hidden { display: none; }
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff;
+    padding: 10px 16px; border-radius: 10px; font-size: 13.5px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; max-width: 90vw; }
+  #toast.show { opacity: 1; }
+  #toast.err { background: var(--bad); }
+  dialog { border: none; border-radius: 12px; padding: 0; width: min(440px, 92vw); box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+  dialog::backdrop { background: rgba(17,24,39,.45); }
+  dialog form { padding: 20px; display: grid; gap: 12px; }
+  dialog h3 { margin: 0 0 4px; font-size: 16px; }
+  dialog label { display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+  dialog input, dialog select { font: inherit; font-size: 14px; color: var(--ink); font-weight: 400; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+  dialog input:focus, dialog select:focus { outline: 2px solid #c7d2fe; border-color: var(--accent); }
+  dialog .buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+  dialog .form-error { color: var(--bad); font-size: 13px; min-height: 0; }
 </style>
 </head>
 <body>
@@ -92,21 +113,36 @@
     </section>
   </div>
 
-  <div data-panel="devices" class="hidden"><div id="devices"></div></div>
+  <div data-panel="devices" class="hidden">
+    <p class="hint" style="padding:0 0 12px">Les modifications faites ici arrivent sur les PDA en 30 secondes au plus.</p>
+    <div id="devices"></div>
+  </div>
 
   <div data-panel="products" class="hidden">
     <section class="card">
       <div class="toolbar">
         <input type="search" id="productSearch" placeholder="Rechercher un code-barres ou une catégorie…">
         <span class="muted" id="productCount"></span>
+        <button class="primary grow" id="newProduct" type="button">+ Nouveau produit</button>
       </div>
       <div id="products"></div>
     </section>
   </div>
 
-  <div data-panel="categories" class="hidden"><section class="card"><div id="categories"></div></section></div>
+  <div data-panel="categories" class="hidden">
+    <section class="card">
+      <div class="toolbar">
+        <span class="muted" id="categoryCount"></span>
+        <button class="primary grow" id="newCategory" type="button">+ Nouvelle catégorie</button>
+      </div>
+      <div id="categories"></div>
+    </section>
+  </div>
   <div data-panel="settings" class="hidden"><section class="card"><div id="settings"></div></section></div>
 </main>
+
+<dialog id="dialog"><form method="dialog" id="dialogForm"></form></dialog>
+<div id="toast"></div>
 
 <script>
 (() => {
@@ -117,8 +153,7 @@
   const ttc = (cents) => Math.round(cents * 1.2);
   const dt = (v) => {
     if (!v) return '—';
-    const d = new Date(v);
-    return d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return new Date(v).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
   const ago = (v) => {
     if (!v) return 'jamais';
@@ -130,6 +165,13 @@
     if (h < 48) return `il y a ${h} h`;
     return `il y a ${Math.round(h / 24)} j`;
   };
+  // « 12,50 » ou « 12.5 » → 1250 centimes (null si invalide)
+  const parseEuros = (s) => {
+    const t = String(s).trim().replace(/\s|€/g, '').replace(',', '.');
+    if (!/^\d+(\.\d{1,2})?$/.test(t)) return null;
+    return Math.round(parseFloat(t) * 100);
+  };
+  const eurosInput = (cents) => (cents / 100).toFixed(2).replace('.', ',');
 
   // Construction DOM sans innerHTML pour les données (elles viennent des PDA)
   function el(tag, props = {}, ...children) {
@@ -137,21 +179,164 @@
     for (const [k, v] of Object.entries(props)) {
       if (k === 'class') n.className = v;
       else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
       else n.setAttribute(k, v);
     }
     for (const c of children.flat()) if (c !== null && c !== undefined) n.append(c instanceof Node ? c : document.createTextNode(String(c)));
     return n;
   }
   const badge = (text, kind) => el('span', { class: `badge b-${kind}`, text });
+  const btn = (text, onclick, cls = 'sm') => el('button', { type: 'button', class: cls, text, onclick });
 
   function table(headers, rows) {
     if (!rows.length) return el('div', { class: 'empty', text: 'Aucune donnée.' });
+    const cls = (h) => (h.num ? 'num' : h.act ? 'act' : h.mono ? 'mono' : '');
     return el('table', {},
-      el('thead', {}, el('tr', {}, headers.map((h) => el('th', { class: h.num ? 'num' : '', text: h.label })))),
-      el('tbody', {}, rows.map((cells) => el('tr', {}, cells.map((c, i) =>
-        el('td', { class: headers[i].num ? 'num' : (headers[i].mono ? 'mono' : '') }, c ?? '—'))))));
+      el('thead', {}, el('tr', {}, headers.map((h) => el('th', { class: cls(h), text: h.label })))),
+      el('tbody', {}, rows.map((cells) => el('tr', {}, cells.map((c, i) => el('td', { class: cls(headers[i]) }, c ?? '—'))))));
   }
 
+  // ── Écritures ────────────────────────────────────────────────────────
+  let toastTimer = null;
+  function toast(msg, error = false) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'show' + (error ? ' err' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.className = ''; }, 3500);
+  }
+
+  async function api(method, url, body) {
+    const res = await fetch(url, {
+      method,
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.ok) throw new Error(json.error || `Erreur ${res.status}`);
+    return json;
+  }
+
+  async function confirmDelete(message, url) {
+    if (!confirm(message)) return;
+    try {
+      await api('DELETE', url);
+      toast('Supprimé ✓');
+      await load();
+    } catch (e) { toast(e.message, true); }
+  }
+
+  /**
+   * Fenêtre de saisie. fields : [{ name, label, value, type?, options?, required? }]
+   * submit(values) peut lever une erreur : elle s'affiche dans la fenêtre.
+   */
+  const dialog = document.getElementById('dialog');
+  function openForm(title, fields, submit) {
+    const form = document.getElementById('dialogForm');
+    const inputs = {};
+    const err = el('div', { class: 'form-error' });
+    const save = el('button', { type: 'submit', class: 'primary', text: 'Enregistrer' });
+    form.replaceChildren(
+      el('h3', { text: title }),
+      ...fields.map((f) => {
+        let input;
+        if (f.options) {
+          input = el('select', { name: f.name }, f.options.map(([v, l]) => {
+            const o = el('option', { value: v, text: l });
+            if (v === f.value) o.selected = true;
+            return o;
+          }));
+        } else {
+          input = el('input', { name: f.name, type: 'text', autocomplete: 'off', inputmode: f.inputmode ?? 'text' });
+          input.value = f.value ?? '';
+          if (f.placeholder) input.placeholder = f.placeholder;
+        }
+        inputs[f.name] = input;
+        return el('label', {}, f.label, input);
+      }),
+      err,
+      el('div', { class: 'buttons' }, btn('Annuler', () => dialog.close(), ''), save),
+    );
+    form.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const values = Object.fromEntries(Object.entries(inputs).map(([k, i]) => [k, i.value]));
+      for (const f of fields) {
+        if (f.required && !String(values[f.name]).trim()) { err.textContent = `« ${f.label} » est obligatoire.`; return; }
+      }
+      save.disabled = true;
+      try {
+        await submit(values);
+        dialog.close();
+        toast('Enregistré ✓');
+        await load();
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        save.disabled = false;
+      }
+    };
+    dialog.showModal();
+    form.querySelector('input, select')?.focus();
+  }
+
+  const categoryOptions = () => data.categories.map((c) => [c.id, c.name]);
+
+  function editProduct(p) {
+    if (!data.categories.length) { toast("Créez d'abord une catégorie.", true); return; }
+    openForm(p ? `Modifier le produit ${p.barcode}` : 'Nouveau produit', [
+      { name: 'barcode', label: 'Code-barres', value: p?.barcode, required: true },
+      { name: 'categoryId', label: 'Catégorie', value: p?.categoryId ?? data.categories[0].id, options: categoryOptions() },
+      { name: 'price', label: 'Prix HT (€)', value: p ? eurosInput(p.priceCents) : '', required: true, inputmode: 'decimal', placeholder: '12,50' },
+      { name: 'nameEn', label: 'Nom anglais (facultatif)', value: p?.nameEn ?? '' },
+    ], async (v) => {
+      const priceCents = parseEuros(v.price);
+      if (priceCents === null) throw new Error('Prix invalide (exemple : 12,50).');
+      await api('POST', '/admin/api/products', { id: p?.id, barcode: v.barcode, categoryId: v.categoryId, priceCents, nameEn: v.nameEn });
+    });
+  }
+
+  function editCategory(c) {
+    openForm(c ? `Modifier « ${c.name} »` : 'Nouvelle catégorie', [
+      { name: 'name', label: 'Nom', value: c?.name, required: true },
+      { name: 'nameEn', label: 'Nom anglais (ticket EN)', value: c?.nameEn ?? '' },
+      { name: 'sageArticleCode', label: 'Code article Sage', value: c?.sageArticleCode ?? '' },
+      { name: 'barcodePrefix', label: 'Préfixe code-barres', value: c?.barcodePrefix ?? '' },
+    ], (v) => api('POST', '/admin/api/categories', { id: c?.id, ...v }));
+  }
+
+  function editChannel(device, c) {
+    openForm(c ? `Modifier « ${c.name} »` : `Nouveau canal — ${device.name}`, [
+      { name: 'name', label: 'Nom du canal', value: c?.name ?? `Client ${device.channels.length + 1}`, required: true },
+      { name: 'discount', label: 'Remise (%)', value: String(c?.discountPercent ?? 0), inputmode: 'numeric' },
+    ], async (v) => {
+      const d = Number(String(v.discount).trim() || 0);
+      if (!Number.isInteger(d) || d < 0 || d > 100) throw new Error('Remise entre 0 et 100.');
+      await api('POST', '/admin/api/channels', { id: c?.id, deviceId: device.id, name: v.name, discountPercent: d });
+    });
+  }
+
+  function editLine(c, l) {
+    openForm(`${l.categoryName} à ${euro(l.unitPriceCents)} — ${c.name}`, [
+      { name: 'quantity', label: 'Quantité (0 = retirer la ligne)', value: String(l.quantity), inputmode: 'numeric', required: true },
+    ], async (v) => {
+      const q = Number(String(v.quantity).trim());
+      if (!Number.isInteger(q) || q < 0) throw new Error('Quantité invalide.');
+      await api('POST', `/admin/api/channels/${c.id}/lines`, { categoryName: l.categoryName, unitPriceCents: l.unitPriceCents, quantity: q });
+    });
+  }
+
+  // « Retirer » une ligne du panier = la passer à la quantité 0
+  async function removeLine(c, l) {
+    if (!confirm(`Retirer « ${l.categoryName} » (${euro(l.unitPriceCents)}) du canal « ${c.name} » ?`)) return;
+    try {
+      await api('POST', `/admin/api/channels/${c.id}/lines`, { categoryName: l.categoryName, unitPriceCents: l.unitPriceCents, quantity: 0 });
+      toast('Retiré ✓');
+      await load();
+    } catch (e) { toast(e.message, true); }
+  }
+
+  // ── Rendu ────────────────────────────────────────────────────────────
   function renderOverview() {
     const chans = data.devices.reduce((s, d) => s + d.channels.length, 0);
     const stats = [
@@ -191,24 +376,32 @@
       root.replaceChildren(el('section', { class: 'card' }, el('div', { class: 'empty', text: 'Aucune caisse.' })));
       return;
     }
-    // Garde les canaux dépliés d'un rafraîchissement à l'autre
     const open = new Set([...root.querySelectorAll('details[open]')].map((d) => d.dataset.key));
     root.replaceChildren(...data.devices.map((d) => el('section', { class: 'card' },
-      el('h2', {}, d.name, el('small', { text: `${d.channels.length} canal${d.channels.length > 1 ? 'aux' : ''} ouvert${d.channels.length > 1 ? 's' : ''}` })),
+      el('h2', {}, d.name,
+        el('small', { text: d.channels.length > 1 ? `${d.channels.length} canaux ouverts` : `${d.channels.length} canal ouvert` }),
+        el('span', { class: 'grow' }, btn('+ Nouveau canal', () => editChannel(d)))),
       d.channels.length ? d.channels.map((c) => {
-        const key = d.name + '/' + c.name + '/' + c.createdAt;
         const after = c.totalCents - Math.round(c.totalCents * c.discountPercent / 100);
-        const det = el('details', { class: 'chan', 'data-key': key },
+        // Les boutons dans <summary> ne doivent pas plier / déplier le canal
+        const stop = (fn) => (ev) => { ev.preventDefault(); ev.stopPropagation(); fn(); };
+        const det = el('details', { class: 'chan', 'data-key': c.id },
           el('summary', {},
             el('span', { class: 'name', text: c.name }),
             c.discountPercent ? badge(`-${c.discountPercent} %`, 'ok') : null,
             el('span', { class: 'right' },
               el('span', { class: 'muted', text: `${c.articles} article${c.articles > 1 ? 's' : ''}` }),
               el('span', { text: `${euro(after)} HT` }),
-              el('b', { text: `${euro(ttc(after))} TTC` }))),
-          table([{ label: 'Catégorie' }, { label: 'Qté', num: true }, { label: 'P.U. HT', num: true }, { label: 'Total HT', num: true }],
-            c.lines.map((l) => [l.categoryName, `x${l.quantity}`, euro(l.unitPriceCents), euro(l.unitPriceCents * l.quantity)])));
-        if (open.has(key)) det.open = true;
+              el('b', { text: `${euro(ttc(after))} TTC` }),
+              el('span', { class: 'actions' },
+                btn('Modifier', stop(() => editChannel(d, c))),
+                btn('Supprimer', stop(() => confirmDelete(`Supprimer le canal « ${c.name} » et son panier, sur tous les PDA ?`, `/admin/api/channels/${c.id}`)), 'sm danger')))),
+          table([{ label: 'Catégorie' }, { label: 'Qté', num: true }, { label: 'P.U. HT', num: true }, { label: 'Total HT', num: true }, { label: '', act: true }],
+            c.lines.map((l) => [l.categoryName, `x${l.quantity}`, euro(l.unitPriceCents), euro(l.unitPriceCents * l.quantity),
+              el('span', { class: 'actions' },
+                btn('Quantité', () => editLine(c, l)),
+                btn('Retirer', () => removeLine(c, l), 'sm danger'))])));
+        if (open.has(c.id)) det.open = true;
         return det;
       }) : el('div', { class: 'empty', text: 'Aucun canal ouvert.' }))));
   }
@@ -222,17 +415,25 @@
       `${list.length.toLocaleString('fr-FR')} produit${list.length > 1 ? 's' : ''}`;
     const shown = list.slice(0, 1000);
     const t = table(
-      [{ label: 'Code-barres', mono: true }, { label: 'Catégorie' }, { label: 'Prix HT', num: true }, { label: 'Prix TTC', num: true }, { label: 'Nom EN' }, { label: 'Reçu par le serveur' }, { label: 'Par' }],
-      shown.map((p) => [p.barcode, p.categoryName ?? '—', euro(p.priceCents), euro(ttc(p.priceCents)), p.nameEn ?? '—', dt(p.receivedAt), p.by ?? '—']));
+      [{ label: 'Code-barres', mono: true }, { label: 'Catégorie' }, { label: 'Prix HT', num: true }, { label: 'Prix TTC', num: true }, { label: 'Nom EN' }, { label: 'Modifié le' }, { label: 'Par' }, { label: '', act: true }],
+      shown.map((p) => [p.barcode, p.categoryName ?? '—', euro(p.priceCents), euro(ttc(p.priceCents)), p.nameEn ?? '—', dt(p.receivedAt), p.by ?? '—',
+        el('span', { class: 'actions' },
+          btn('Modifier', () => editProduct(p)),
+          btn('Supprimer', () => confirmDelete(`Supprimer le produit ${p.barcode} (${p.categoryName}) ?`, `/admin/api/products/${p.id}`), 'sm danger'))]));
     const extra = list.length > shown.length
       ? el('div', { class: 'empty', text: `… ${list.length - shown.length} autres, affinez la recherche.` }) : null;
     document.getElementById('products').replaceChildren(t, ...(extra ? [extra] : []));
   }
 
   function renderCategories() {
+    document.getElementById('categoryCount').textContent =
+      `${data.categories.length} catégorie${data.categories.length > 1 ? 's' : ''}`;
     document.getElementById('categories').replaceChildren(table(
-      [{ label: 'Catégorie' }, { label: 'Nom EN' }, { label: 'Code Sage', mono: true }, { label: 'Préfixe code-barres', mono: true }, { label: 'Produits', num: true }, { label: 'Reçu par le serveur' }, { label: 'Par' }],
-      data.categories.map((c) => [c.name, c.nameEn ?? '—', c.sageArticleCode ?? '—', c.barcodePrefix ?? '—', c.productCount, dt(c.receivedAt), c.by ?? '—'])));
+      [{ label: 'Catégorie' }, { label: 'Nom EN' }, { label: 'Code Sage', mono: true }, { label: 'Préfixe code-barres', mono: true }, { label: 'Produits', num: true }, { label: 'Modifié le' }, { label: '', act: true }],
+      data.categories.map((c) => [c.name, c.nameEn ?? '—', c.sageArticleCode ?? '—', c.barcodePrefix ?? '—', c.productCount, dt(c.receivedAt),
+        el('span', { class: 'actions' },
+          btn('Modifier', () => editCategory(c)),
+          btn('Supprimer', () => confirmDelete(`Supprimer la catégorie « ${c.name} » ?`, `/admin/api/categories/${c.id}`), 'sm danger'))])));
   }
 
   const SETTING_LABELS = {
@@ -242,10 +443,16 @@
     sage_manual_article: 'Code article Sage (produits manuels)',
   };
   function renderSettings() {
+    const byKey = Object.fromEntries(data.settings.map((s) => [s.key, s]));
     document.getElementById('settings').replaceChildren(
-      el('p', { class: 'hint', text: "Paramètres communs à tous les PDA. L'imprimante et le scanner sont réglés sur chaque PDA et n'apparaissent pas ici. Un paramètre jamais modifié garde sa valeur par défaut et n'est pas listé." }),
-      table([{ label: 'Paramètre' }, { label: 'Valeur' }, { label: 'Modifié le' }],
-        data.settings.map((s) => [SETTING_LABELS[s.key] ?? s.key, s.value || '—', dt(s.receivedAt)])));
+      el('p', { class: 'hint', text: "Paramètres communs à tous les PDA. L'imprimante et le scanner sont réglés sur chaque PDA et n'apparaissent pas ici. « valeur par défaut » = jamais modifié : le PDA utilise sa valeur intégrée." }),
+      table([{ label: 'Paramètre' }, { label: 'Valeur' }, { label: 'Modifié le' }, { label: '', act: true }],
+        Object.entries(SETTING_LABELS).map(([key, label]) => {
+          const s = byKey[key];
+          return [label, s ? (s.value || '(vide)') : el('span', { class: 'muted', text: 'valeur par défaut' }), s ? dt(s.receivedAt) : '—',
+            btn('Modifier', () => openForm(label, [{ name: 'value', label, value: s?.value ?? '' }],
+              (v) => api('POST', '/admin/api/settings', { key, value: v.value })))];
+        })));
   }
 
   function render() {
@@ -280,9 +487,13 @@
   });
   document.getElementById('refresh').addEventListener('click', load);
   document.getElementById('productSearch').addEventListener('input', () => data && renderProducts());
+  document.getElementById('newProduct').addEventListener('click', () => data && editProduct(null));
+  document.getElementById('newCategory').addEventListener('click', () => data && editCategory(null));
 
   load();
-  setInterval(load, REFRESH_MS);
+  // Pas de rafraîchissement pendant une saisie (la fenêtre resterait valide,
+  // mais la liste derrière bougerait)
+  setInterval(() => { if (!dialog.open) load(); }, REFRESH_MS);
 })();
 </script>
 </body>

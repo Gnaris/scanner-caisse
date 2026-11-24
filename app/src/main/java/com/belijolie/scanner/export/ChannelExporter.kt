@@ -34,8 +34,24 @@ class SageExportValidationException(message: String) : IllegalStateException(mes
  */
 sealed class ExportSuccess {
     data class File(val filename: String) : ExportSuccess()
-    data class SageInvoice(val numero: String) : ExportSuccess()
+    data class SageInvoice(val numero: String, val mode: SageMode = SageMode.CREER) : ExportSuccess()
 }
+
+/**
+ * Que faire dans Sage 50 (SageBridge ≥ 1.4.1) :
+ *  - CREER : nouvelle facture provisoire (client 003) ;
+ *  - AJOUTER : ajoute les lignes du panier à une facture PROVISOIRE existante ;
+ *  - REMPLACER : vide une facture provisoire existante puis y met le panier.
+ */
+enum class SageMode(val api: String) { CREER("creer"), AJOUTER("ajouter"), REMPLACER("remplacer") }
+
+/** Facture provisoire existante, proposée pour AJOUTER / REMPLACER. */
+data class SageInvoiceRef(
+    val numero: String,
+    val nomClient: String,
+    val date: String,
+    val totalTtcCents: Long,
+)
 
 /**
  * Envoie le contenu d'un canal vers l'écoute HTTP du PC. Trois formats :
@@ -62,21 +78,18 @@ object ChannelExporter {
     suspend fun exportChannel(
         settings: AppSettings,
         channel: Channel,
-        format: ExportFormat
+        format: ExportFormat,
+        sageMode: SageMode = SageMode.CREER,
+        sageNumero: String? = null,
     ): Result<ExportSuccess> = withContext(Dispatchers.IO) {
-        if (settings.exportUrl.isBlank()) {
-            return@withContext Result.failure(
-                IllegalStateException("Configure l'URL d'export dans les paramètres")
-            )
-        }
-
         if (format == ExportFormat.SAGE) {
             val validationError = validateSage(channel.lines, settings.sageManualArticleCode.trim())
             if (validationError != null) {
                 return@withContext Result.failure(SageExportValidationException(validationError))
             }
             return@withContext runCatching {
-                postSageInvoice(settings, channel)
+                val base = PcListener.resolveBase(settings.exportUrl)
+                postSageInvoice(base, settings, channel, sageMode, sageNumero)
             }
         }
 
@@ -101,6 +114,47 @@ object ChannelExporter {
         runCatching { postFile(settings, filename, payload, contentType) }
     }
 
+    /** SageBridge renvoie les dates au format américain M/d/yyyy → jj/mm/aaaa. */
+    private fun frenchDate(us: String): String {
+        val m = Regex("""^(\d{1,2})/(\d{1,2})/(\d{4})$""").find(us) ?: return us
+        val (month, day, year) = m.destructured
+        return "%02d/%02d/%s".format(day.toInt(), month.toInt(), year)
+    }
+
+    /** Factures provisoires de Sage (via Scanner Listener → SageBridge). */
+    suspend fun listProvisionalInvoices(settings: AppSettings): Result<List<SageInvoiceRef>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val base = PcListener.resolveBase(settings.exportUrl)
+                val conn = URL("$base/sage-factures").openConnection() as HttpURLConnection
+                try {
+                    conn.connectTimeout = TIMEOUT_MS
+                    conn.readTimeout = 65_000
+                    val code = conn.responseCode
+                    if (code == 404) throw IOException(
+                        "Mettez à jour « Scanner Listener » sur le PC (redémarrez-le) pour utiliser cette fonction."
+                    )
+                    val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                        ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                    val json = runCatching { JSONObject(text) }.getOrNull()
+                        ?: throw IOException("Réponse illisible du PC (HTTP $code)")
+                    if (!json.optBoolean("ok")) throw IOException(json.optString("error").ifBlank { "HTTP $code" })
+                    val arr = json.optJSONArray("factures") ?: JSONArray()
+                    (0 until arr.length()).map { i ->
+                        val f = arr.getJSONObject(i)
+                        SageInvoiceRef(
+                            numero = f.optString("numero"),
+                            nomClient = f.optString("nomClient"),
+                            date = frenchDate(f.optString("date").substringBefore(' ')),
+                            totalTtcCents = Math.round(f.optDouble("totalTTC", 0.0) * 100),
+                        )
+                    }.filter { it.numero.isNotBlank() }
+                } finally {
+                    conn.disconnect()
+                }
+            }
+        }
+
     /**
      * Ticket de caisse en PDF (même mise en page que le ticket imprimé, voir
      * TicketPdf), envoyé au pc-listener qui le range dans le dossier d'export.
@@ -111,11 +165,6 @@ object ChannelExporter {
         channel: Channel,
         lang: com.belijolie.scanner.printer.TicketLang,
     ): Result<ExportSuccess> = withContext(Dispatchers.IO) {
-        if (settings.exportUrl.isBlank()) {
-            return@withContext Result.failure(
-                IllegalStateException("Configure l'URL d'export dans les paramètres")
-            )
-        }
         runCatching {
             val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.FRANCE).format(Date())
             val safeName = channel.name.replace(Regex("[^A-Za-z0-9_-]"), "_").ifBlank { "canal" }
@@ -128,8 +177,11 @@ object ChannelExporter {
     }
 
     private fun postFile(settings: AppSettings, filename: String, payload: ByteArray, contentType: String): ExportSuccess {
+        // Wi-Fi (URL export PC) ou, en secours, câble USB
+        val base = PcListener.resolveBase(settings.exportUrl)
+        val path = PcListener.exportPath(settings.exportUrl)
         val url = URL(
-            settings.exportUrl + delimiterForQuery(settings.exportUrl)
+            base + path + delimiterForQuery(path)
                 + "filename=" + URLEncoder.encode(filename, "UTF-8")
         )
         val conn = url.openConnection() as HttpURLConnection
@@ -295,9 +347,16 @@ object ChannelExporter {
     //  - Description = nom catégorie en MAJUSCULES. Pas de code-barres (demande
     //    produit : le barcode ne doit pas apparaître sur la facture Sage).
 
-    private fun postSageInvoice(settings: AppSettings, channel: Channel): ExportSuccess.SageInvoice {
-        val body = buildSageInvoiceJson(channel, settings.sageManualArticleCode.trim())
-        val url = URL(sageInvoiceUrl(settings.exportUrl))
+    private fun postSageInvoice(
+        base: String,
+        settings: AppSettings,
+        channel: Channel,
+        mode: SageMode,
+        numero: String?,
+    ): ExportSuccess.SageInvoice {
+        if (mode != SageMode.CREER && numero.isNullOrBlank()) throw IOException("Choisissez la facture à modifier.")
+        val body = buildSageInvoiceJson(channel, settings.sageManualArticleCode.trim(), mode, numero)
+        val url = URL("$base/sage-facture")
         val conn = url.openConnection() as HttpURLConnection
         try {
             conn.requestMethod = "POST"
@@ -332,34 +391,25 @@ object ChannelExporter {
             if (!ok) {
                 throw IOException(sageError ?: "SageBridge a refusé la facture")
             }
-            val numero = parsed.optString("numero").ifBlank { "?" }
-            return ExportSuccess.SageInvoice(numero)
+            val result = parsed.optString("numero").ifBlank { numero ?: "?" }
+            return ExportSuccess.SageInvoice(result, mode)
         } finally {
             conn.disconnect()
         }
     }
 
-    /**
-     * Construit l'URL `/sage-facture` sur le pc-listener à partir de l'URL
-     * d'export configurée. On garde le même host:port (= pc-listener) mais on
-     * remplace le chemin, parce que `exportUrl` pointe aujourd'hui vers
-     * `/export` (dépose de fichier).
-     */
-    private fun sageInvoiceUrl(exportUrl: String): String {
-        val base = try {
-            val u = URL(exportUrl)
-            val port = if (u.port > 0) ":${u.port}" else ""
-            "${u.protocol}://${u.host}$port"
-        } catch (_: Exception) {
-            // Fallback : si l'URL ne parse pas on la laisse telle quelle,
-            // la requête échouera avec un message réseau clair.
-            exportUrl.trimEnd('/')
-        }
-        return "$base/sage-facture"
-    }
-
-    private fun buildSageInvoiceJson(channel: Channel, manualArticleCode: String): String {
+    private fun buildSageInvoiceJson(
+        channel: Channel,
+        manualArticleCode: String,
+        mode: SageMode = SageMode.CREER,
+        numero: String? = null,
+    ): String {
         val root = JSONObject()
+        if (mode != SageMode.CREER) {
+            // Facture provisoire existante : le client de la facture est gardé
+            root.put("mode", mode.api)
+            root.put("numero", numero)
+        }
         root.put("site", SAGE_SITE)
         root.put("orderNo", channel.id)
         root.put("client", SAGE_CLIENT_CODE)

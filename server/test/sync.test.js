@@ -181,3 +181,58 @@ test('page admin : mot de passe obligatoire, PDA suivis', async () => {
   assert.equal(data.categories[0].by, data.clients[0].label);
   await app.close();
 });
+
+test('page admin : créer / modifier / supprimer', async () => {
+  const app = buildApp({ pool: createPool({ database: DB }), apiKey: 'k'.repeat(40), adminPassword: 'secret-admin', logger: false });
+  const h = { authorization: 'Basic ' + Buffer.from('admin:secret-admin').toString('base64'), 'x-requested-with': 'fetch' };
+  const post = (url, payload) => app.inject({ method: 'POST', url, headers: h, payload });
+  const del = (url) => app.inject({ method: 'DELETE', url, headers: h });
+
+  // Anti-CSRF : sans l'en-tête, refusé
+  const noCsrf = await app.inject({ method: 'POST', url: '/admin/api/categories', headers: { authorization: h.authorization }, payload: { name: 'X' } });
+  assert.equal(noCsrf.statusCode, 403);
+
+  const c = await post('/admin/api/categories', { name: 'Bague', sageArticleCode: 'ART1' });
+  assert.equal(c.statusCode, 200);
+  const catId = c.json().id;
+  assert.equal((await post('/admin/api/categories', { name: 'bague' })).statusCode, 409);
+
+  const p = await post('/admin/api/products', { barcode: '123', categoryId: catId, priceCents: 1250 });
+  assert.equal(p.statusCode, 200);
+  const prodId = p.json().id;
+  assert.equal((await post('/admin/api/products', { barcode: '123', categoryId: catId, priceCents: 1 })).statusCode, 409);
+  assert.equal((await post('/admin/api/products', { id: prodId, priceCents: 1500 })).statusCode, 200);
+  assert.equal((await del(`/admin/api/categories/${catId}`)).statusCode, 409); // utilisée
+
+  assert.equal((await post('/admin/api/settings', { key: 'shop_name', value: 'Beli' })).statusCode, 200);
+
+  // Canal : il faut une caisse
+  await push(pool, { origin: 'pda1', changes: { devices: [{ id: 'd1', name: 'Appareil 1', updatedAt: 1 }] } });
+  const ch = await post('/admin/api/channels', { deviceId: 'd1', name: 'Client web' });
+  assert.equal(ch.statusCode, 200);
+  const chId = ch.json().id;
+  const line = (id, q) => ({ id, channelId: chId, productId: null, barcode: '', categoryName: 'Bague', categoryNameEn: null,
+    nameEn: null, sageArticleCode: null, unitPriceCents: 500, quantity: q, createdAt: 1, updatedAt: Date.now() });
+  await push(pool, { origin: 'pda1', changes: { cart_lines: [line('l1', 1), line('l2', 2)] } });
+  assert.equal((await post(`/admin/api/channels/${chId}/lines`, { categoryName: 'Bague', unitPriceCents: 500, quantity: 5 })).statusCode, 200);
+
+  const data = (await app.inject({ method: 'GET', url: '/admin/data.json', headers: h })).json();
+  assert.equal(data.products[0].priceCents, 1500);
+  assert.equal(data.settings[0].value, 'Beli');
+  const webChannel = data.devices[0].channels.find((x) => x.id === chId);
+  assert.equal(webChannel.lines.length, 1);
+  assert.equal(webChannel.lines[0].quantity, 5);
+
+  // Les PDA voient les modifications au pull
+  const pulled = await pull(pool, 0);
+  assert.equal(pulled.changes.products.find((x) => x.id === prodId).priceCents, 1500);
+
+  assert.equal((await del(`/admin/api/channels/${chId}`)).statusCode, 200);
+  assert.equal((await del(`/admin/api/products/${prodId}`)).statusCode, 200);
+  assert.equal((await del(`/admin/api/categories/${catId}`)).statusCode, 200);
+  const after = (await app.inject({ method: 'GET', url: '/admin/data.json', headers: h })).json();
+  assert.equal(after.products.length, 0);
+  assert.equal(after.categories.length, 0);
+  assert.equal(after.devices[0].channels.length, 0);
+  await app.close();
+});

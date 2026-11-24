@@ -14,11 +14,15 @@ import java.net.UnknownHostException
  * remplacer un message type "connection refused" par "Wi-Fi déconnecté".
  */
 fun Throwable.toHumanMessage(context: Context? = null): String {
+    // Messages déjà rédigés pour l'utilisateur (PC injoignable, refus Sage…)
+    if (this is com.belijolie.scanner.export.PcUnreachableException) return message.orEmpty()
+    val cause = this.unwrapCause()
+    val isNetworkError = cause is UnknownHostException || cause is NoRouteToHostException ||
+        cause is ConnectException || cause is SocketTimeoutException
     val netOk = context?.let { isNetworkConnected(it) } ?: true
-    if (!netOk) {
+    if (!netOk && isNetworkError) {
         return "📶 Wi-Fi non connecté. Reconnecte le PDA au réseau et réessaie."
     }
-    val cause = this.unwrapCause()
     return when (cause) {
         is UnknownHostException ->
             "Adresse introuvable. Vérifie l'IP dans les paramètres."

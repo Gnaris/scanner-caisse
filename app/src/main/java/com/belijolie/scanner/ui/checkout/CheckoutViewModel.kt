@@ -18,6 +18,8 @@ import com.belijolie.scanner.data.entity.ProductWithCategory
 import com.belijolie.scanner.R
 import com.belijolie.scanner.export.ChannelExporter
 import com.belijolie.scanner.export.ExportFormat
+import com.belijolie.scanner.export.SageInvoiceRef
+import com.belijolie.scanner.export.SageMode
 import com.belijolie.scanner.printer.EscPosPrinter
 import com.belijolie.scanner.printer.TicketLang
 import com.belijolie.scanner.scanner.ScanEventBus
@@ -108,6 +110,43 @@ class CheckoutViewModel(
         _scanMultiplier.value = n.coerceAtLeast(1)
     }
 
+    /** Mode retrait : chaque scan enlève l'article du panier au lieu de l'ajouter. */
+    private val _removeMode = MutableStateFlow(false)
+    val removeMode: StateFlow<Boolean> = _removeMode.asStateFlow()
+
+    fun toggleRemoveMode() {
+        _removeMode.value = !_removeMode.value
+    }
+
+    /**
+     * Retire [qty] exemplaires du produit scanné de la ligne correspondante
+     * (même catégorie + même prix). Bip d'erreur + message si le produit est
+     * inconnu ou absent du panier.
+     */
+    private suspend fun removeScanned(barcode: String) {
+        val ctx = ScannerApp.instance.applicationContext
+        val product = db.productDao().findByBarcode(barcode)
+        val st = channelsRepo.current()
+        val channel = st.channels.firstOrNull { it.id == st.activeChannelId }
+        val key = product?.let { com.belijolie.scanner.cart.lineKey(it.category.name, it.product.priceCents) }
+        val lines = channel?.lines.orEmpty()
+        // Par produit, puis par code-barres, puis par (catégorie, prix) : la
+        // catégorie a pu être renommée depuis l'ajout au panier.
+        val line = lines.firstOrNull { product != null && it.productId == product.product.id }
+            ?: lines.firstOrNull { it.barcode == barcode }
+            ?: lines.firstOrNull { it.key == key }
+        if (line == null) {
+            ScanSounds.playNotFound()
+            _printResult.value = PrintResult(false, ctx.getString(R.string.checkout_remove_not_in_cart))
+            return
+        }
+        val qty = _scanMultiplier.value.coerceAtLeast(1)
+        channelsRepo.setLineQuantityInActive(line.key, line.quantity - qty)
+        ScanSounds.playFound()
+        // Le bloc « dernier scan » ne concerne que les ajouts
+        _lastScan.value = null
+    }
+
     private val _lastScan = MutableStateFlow<LastScan?>(null)
     val lastScan: StateFlow<LastScan?> = _lastScan.asStateFlow()
 
@@ -146,6 +185,7 @@ class CheckoutViewModel(
         // forcément par la liste → bouton « Créer un canal » → détail. Un
         // scan hors d'un canal ouvert est ignoré (décision produit).
         if (st.activeChannelId == null) return
+        if (_removeMode.value) return removeScanned(barcode)
         val product = db.productDao().findByBarcode(barcode)
         if (product == null) {
             ScanSounds.playNotFound()
@@ -212,7 +252,33 @@ class CheckoutViewModel(
     fun clearPrintResult() { _printResult.value = null }
     fun clearExportResult() { _exportResult.value = null }
 
-    fun exportChannel(id: String, format: ExportFormat) {
+    /** Factures provisoires Sage proposées pour « Ajouter » / « Remplacer ». */
+    sealed class SageInvoices {
+        data object Loading : SageInvoices()
+        data class Loaded(val list: List<SageInvoiceRef>) : SageInvoices()
+        data class Error(val message: String) : SageInvoices()
+    }
+
+    private val _sageInvoices = MutableStateFlow<SageInvoices>(SageInvoices.Loading)
+    val sageInvoices: StateFlow<SageInvoices> = _sageInvoices.asStateFlow()
+
+    fun loadSageInvoices() {
+        _sageInvoices.value = SageInvoices.Loading
+        viewModelScope.launch {
+            val ctx = ScannerApp.instance.applicationContext
+            val settings: AppSettings = settingsStore.settings.first()
+            ChannelExporter.listProvisionalInvoices(settings)
+                .onSuccess { _sageInvoices.value = SageInvoices.Loaded(it) }
+                .onFailure { _sageInvoices.value = SageInvoices.Error(it.toHumanMessage(ctx)) }
+        }
+    }
+
+    fun exportChannel(
+        id: String,
+        format: ExportFormat,
+        sageMode: SageMode = SageMode.CREER,
+        sageNumero: String? = null,
+    ) {
         viewModelScope.launch {
             val ctx = ScannerApp.instance.applicationContext
             val st = channelsRepo.current()
@@ -223,14 +289,17 @@ class CheckoutViewModel(
             }
             val settings: AppSettings = settingsStore.settings.first()
             _isExporting.value = true
-            val result = ChannelExporter.exportChannel(settings, channel, format)
+            val result = ChannelExporter.exportChannel(settings, channel, format, sageMode, sageNumero)
             _isExporting.value = false
             result.onSuccess { success ->
                 val msg = when (success) {
                     is com.belijolie.scanner.export.ExportSuccess.File ->
                         ctx.getString(R.string.checkout_export_sent, success.filename)
-                    is com.belijolie.scanner.export.ExportSuccess.SageInvoice ->
-                        ctx.getString(R.string.checkout_export_sage_created, success.numero)
+                    is com.belijolie.scanner.export.ExportSuccess.SageInvoice -> when (success.mode) {
+                        SageMode.CREER -> ctx.getString(R.string.checkout_export_sage_created, success.numero)
+                        SageMode.AJOUTER -> ctx.getString(R.string.checkout_export_sage_added, success.numero)
+                        SageMode.REMPLACER -> ctx.getString(R.string.checkout_export_sage_replaced, success.numero)
+                    }
                 }
                 _exportResult.value = PrintResult(true, msg)
             }.onFailure { e ->

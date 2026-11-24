@@ -20,6 +20,8 @@ import json
 import logging
 import os
 import re
+import shutil
+import zipfile
 import socket
 import subprocess
 import sys
@@ -191,11 +193,63 @@ def relay_to_sagebridge(body: bytes) -> tuple[int, bytes, str]:
         return 502, msg.encode("utf-8"), "application/json; charset=utf-8"
 
 
+SAGEBRIDGE_FACTURES_URL = "http://127.0.0.1:8765/factures"
+
+
+def provisional_invoices() -> tuple[int, bytes]:
+    """Factures PROVISOIRES de Sage (via SageBridge GET /factures), pour que le
+    PDA puisse compléter ou remplacer une facture existante. Renvoie
+    (status, json)."""
+    try:
+        req = urllib.request.Request(SAGEBRIDGE_FACTURES_URL, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except urllib.error.URLError as e:
+        logging.warning("Liste des factures SageBridge échouée (%s)", e)
+        return 502, json.dumps({"ok": False, "error": "SageBridge est injoignable sur ce PC. Ouvre SageBridge puis réessaie."},
+                               ensure_ascii=False).encode("utf-8")
+    except Exception as e:
+        logging.warning("Liste des factures SageBridge erreur (%s)", e)
+        return 502, json.dumps({"ok": False, "error": "Erreur en lisant les factures Sage."}, ensure_ascii=False).encode("utf-8")
+    pieces = data if isinstance(data, list) else data.get("factures", [])
+    out = [
+        {
+            "numero": f.get("numero"),
+            "date": f.get("date"),
+            "client": f.get("client"),
+            "nomClient": f.get("nomClient") or f.get("societe") or "",
+            "totalHT": f.get("totalHT"),
+            "totalTTC": f.get("totalTTC"),
+        }
+        for f in pieces
+        if not f.get("validee") and (f.get("nature") == "facture" or f.get("typePiece") == "Facture")
+    ]
+    return 200, json.dumps({"ok": True, "factures": out}, ensure_ascii=False).encode("utf-8")
+
+
 class ExportHandler(BaseHTTPRequestHandler):
     server_cfg: dict = {}
 
     def log_message(self, format, *args):  # noqa: A002
         logging.info("%s - %s", self.address_string(), format % args)
+
+    def _send_json(self, status: int, body: bytes) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):  # noqa: N802
+        path = urlparse(self.path).path.rstrip("/")
+        if path == "/ping":
+            # Sert au PDA à vérifier qu'il parle bien au Scanner Listener
+            # (Wi-Fi ou secours par câble USB).
+            return self._send_json(200, json.dumps({"ok": True, "app": APP_NAME, "version": APP_VERSION}).encode("utf-8"))
+        if path == "/sage-factures":
+            status, body = provisional_invoices()
+            return self._send_json(status, body)
+        self.send_response(404); self.end_headers()
 
     def do_POST(self):  # noqa: N802
         parsed = urlparse(self.path)
@@ -269,6 +323,102 @@ class ListenerServer:
     def restart(self, cfg: dict) -> None:
         self.stop()
         self.start(cfg)
+
+
+# ========== Secours par câble USB (adb reverse) ==========
+
+PLATFORM_TOOLS_URL = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
+_NO_WINDOW = 0x08000000  # CREATE_NO_WINDOW : pas de fenêtre console qui clignote
+
+
+class UsbBridge:
+    """Quand un PDA est branché en USB (débogage USB activé et autorisé),
+    ouvre un tunnel `adb reverse tcp:PORT tcp:PORT` : sur le PDA,
+    http://127.0.0.1:PORT mène alors à ce logiciel. L'app s'en sert en secours
+    automatique quand le Wi-Fi ne répond pas (export, ticket PDF, Sage).
+
+    adb est cherché dans le SDK Android, le PATH, puis téléchargé une fois
+    depuis Google dans %LOCALAPPDATA%\\ScannerListener\\platform-tools."""
+
+    def __init__(self, port_getter) -> None:
+        self._port = port_getter
+        self.status = "aucun PDA branché en USB"
+        self._adb: Optional[str] = None
+        self._download_failed = False
+
+    def start(self) -> None:
+        threading.Thread(target=self._loop, name="UsbBridge", daemon=True).start()
+
+    def _find_adb(self) -> Optional[str]:
+        local = Path(os.environ.get("LOCALAPPDATA", Path.home()))
+        candidates = [
+            local / APP_NAME / "platform-tools" / "adb.exe",
+            local / "Android" / "Sdk" / "platform-tools" / "adb.exe",
+        ]
+        for c in candidates:
+            if c.exists():
+                return str(c)
+        return shutil.which("adb")
+
+    def _download_adb(self) -> Optional[str]:
+        if self._download_failed:
+            return None
+        target = Path(os.environ.get("LOCALAPPDATA", Path.home())) / APP_NAME
+        try:
+            logging.info("UsbBridge : téléchargement d'adb (platform-tools)…")
+            tmp = Path(tempfile.gettempdir()) / "scanner-platform-tools.zip"
+            urllib.request.urlretrieve(PLATFORM_TOOLS_URL, tmp)
+            with zipfile.ZipFile(tmp) as z:
+                for name in z.namelist():
+                    base = name.split("/")[-1]
+                    if base in ("adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll"):
+                        (target / "platform-tools").mkdir(parents=True, exist_ok=True)
+                        (target / "platform-tools" / base).write_bytes(z.read(name))
+            tmp.unlink(missing_ok=True)
+            return self._find_adb()
+        except Exception as e:
+            logging.warning("UsbBridge : téléchargement d'adb impossible (%s)", e)
+            self._download_failed = True
+            return None
+
+    def _run(self, *args: str) -> str:
+        r = subprocess.run([self._adb, *args], capture_output=True, text=True, timeout=15,
+                           creationflags=_NO_WINDOW)
+        return r.stdout
+
+    def _loop(self) -> None:
+        import time
+        while True:
+            try:
+                self._tick()
+            except Exception as e:
+                logging.warning("UsbBridge : %s", e)
+            time.sleep(5)
+
+    def _tick(self) -> None:
+        if not self._adb:
+            self._adb = self._find_adb() or self._download_adb()
+            if not self._adb:
+                self.status = "secours USB indisponible (adb introuvable)"
+                return
+        port = int(self._port())
+        lines = self._run("devices").splitlines()[1:]
+        ready, unauthorized = [], []
+        for line in lines:
+            parts = line.split()
+            if len(parts) >= 2:
+                (ready if parts[1] == "device" else unauthorized).append(parts[0])
+        for serial in ready:
+            self._run("-s", serial, "reverse", f"tcp:{port}", f"tcp:{port}")
+        if ready:
+            new = f"PDA branché en USB ({len(ready)}) : secours actif"
+        elif unauthorized:
+            new = "PDA branché mais non autorisé : accepter « Autoriser le débogage USB » sur le PDA"
+        else:
+            new = "aucun PDA branché en USB"
+        if new != self.status:
+            logging.info("UsbBridge : %s", new)
+        self.status = new
 
 
 # ========== Mise à jour auto ==========
@@ -784,6 +934,8 @@ def main() -> None:
     settings = SettingsWindow(cfg, on_save, open_output_dir, updater, server)
 
     server.start(cfg)
+    usb = UsbBridge(lambda: cfg.get("port", DEFAULT_PORT))
+    usb.start()
 
     # Démarre le listener single-instance : quand un `SHOW` arrive sur le
     # port 54327 (= 2e instance lancée), on affiche la fenêtre.
