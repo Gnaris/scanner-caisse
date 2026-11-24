@@ -306,7 +306,7 @@ fun ChannelDetailScreen(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    items(sortedLines, key = { "${it.productId}_${it.categoryName}_${it.unitPriceCents}" }) { line ->
+                    items(sortedLines, key = { it.key }) { line ->
                         val bold = (categoryIndexByName[line.categoryName] ?: 0) % 2 == 1
                         Surface(
                             shape = RoundedCornerShape(8.dp),
@@ -435,7 +435,7 @@ fun ChannelDetailScreen(
             text = { Text(stringResource(R.string.checkout_remove_confirm_body, line.categoryName)) },
             confirmButton = {
                 TextButton(onClick = {
-                    vm.removeLine(line.productId)
+                    vm.removeLine(line.key)
                     lineToRemove = null
                 }) {
                     Text(
@@ -504,7 +504,7 @@ fun ChannelDetailScreen(
             categories = categories,
             onDismiss = { lineToEdit = null },
             onConfirm = { newCategory, newPrice, newQty ->
-                vm.editLine(line.productId, newCategory, newPrice, newQty)
+                vm.editLine(line.key, newCategory, newPrice, newQty)
                 lineToEdit = null
             }
         )

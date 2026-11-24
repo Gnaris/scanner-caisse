@@ -33,7 +33,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -65,8 +64,8 @@ fun UnknownProductSheet(
     categories: List<Category>,
     existingProducts: List<ProductWithCategory>,
     onDismiss: () -> Unit,
-    onCreate: (barcode: String, categoryId: Long, priceCents: Int) -> Unit,
-    onPick: (productId: Long) -> Unit,
+    onCreate: (barcode: String, categoryId: String, priceCents: Int) -> Unit,
+    onPick: (productId: String) -> Unit,
 ) {
     var view by remember { mutableStateOf(View.CREATE) }
 
@@ -177,7 +176,7 @@ private fun BarcodeBadge(barcode: String) {
 private fun CreateForm(
     barcode: String,
     categories: List<Category>,
-    onConfirm: (categoryId: Long, priceCents: Int) -> Unit,
+    onConfirm: (categoryId: String, priceCents: Int) -> Unit,
 ) {
     // Pré-sélection par préfixe : parmi toutes les catégories dont le
     // `barcodePrefix` est préfixe du code-barres scanné, on prend celle avec
@@ -196,7 +195,7 @@ private fun CreateForm(
             }
             .maxByOrNull { it.second }
             ?.first
-        mutableLongStateOf(byPrefix?.id ?: 0L)
+        mutableStateOf(byPrefix?.id ?: "")
     }
     val autoCents = remember(barcode) { decodePriceFromBarcode(barcode) }
     var priceText by remember(barcode) {
@@ -226,7 +225,7 @@ private fun CreateForm(
                 val cents = parsePriceCents(priceText) ?: return@Button
                 onConfirm(categoryId, cents)
             },
-            enabled = categoryId != 0L && parsePriceCents(priceText) != null,
+            enabled = categoryId.isNotEmpty() && parsePriceCents(priceText) != null,
             shape = RoundedCornerShape(10.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5)),
             modifier = Modifier.fillMaxWidth().height(54.dp)
@@ -241,8 +240,8 @@ private fun CreateForm(
 @Composable
 private fun CategoryDropdown(
     categories: List<Category>,
-    selectedId: Long,
-    onSelected: (Long) -> Unit,
+    selectedId: String,
+    onSelected: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val fallbackLabel = if (categories.isEmpty())
@@ -277,7 +276,7 @@ private fun CategoryDropdown(
 @Composable
 private fun PickList(
     products: List<ProductWithCategory>,
-    onPick: (Long) -> Unit
+    onPick: (String) -> Unit
 ) {
     if (products.isEmpty()) {
         Text(stringResource(R.string.unknown_no_products), color = Color.Gray)

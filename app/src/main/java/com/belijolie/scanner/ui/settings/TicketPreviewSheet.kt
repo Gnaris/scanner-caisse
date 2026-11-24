@@ -77,10 +77,10 @@ fun TicketPreviewSheet(
 
     val sampleLines = remember {
         listOf(
-            CartLine(1L, "ex-1", "Boucles", 2917, 1, categoryNameEn = "Earrings"),
-            CartLine(2L, "ex-2", "Bracelet", 2083, 2, categoryNameEn = "Bracelet"),
-            CartLine(3L, "ex-3", "Collier", 1250, 1, categoryNameEn = "Necklace"),
-            CartLine(4L, "ex-4", "Accessoires", 500, 3, categoryNameEn = "Accessories")
+            CartLine("ex-1", null, "ex-1", "Boucles", 2917, 1, categoryNameEn = "Earrings"),
+            CartLine("ex-2", null, "ex-2", "Bracelet", 2083, 2, categoryNameEn = "Bracelet"),
+            CartLine("ex-3", null, "ex-3", "Collier", 1250, 1, categoryNameEn = "Necklace"),
+            CartLine("ex-4", null, "ex-4", "Accessoires", 500, 3, categoryNameEn = "Accessories")
         )
     }
     val sortedLines = remember { sortLines(sampleLines) }

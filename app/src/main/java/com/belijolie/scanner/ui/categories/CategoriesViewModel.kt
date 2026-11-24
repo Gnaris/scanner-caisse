@@ -32,7 +32,7 @@ class CategoriesViewModel(private val db: AppDatabase) : ViewModel() {
                 return@launch
             }
             runCatching {
-                db.categoryDao().insert(
+                db.categoryDao().save(
                     Category(
                         name = cleaned,
                         nameEn = nameEn?.trim()?.takeIf { it.isNotEmpty() },
@@ -46,8 +46,11 @@ class CategoriesViewModel(private val db: AppDatabase) : ViewModel() {
 
     fun delete(category: Category) {
         viewModelScope.launch {
-            runCatching { db.categoryDao().deleteById(category.id) }
-                .onFailure { _error.value = "Impossible de supprimer : des produits l'utilisent." }
+            if (db.categoryDao().countProducts(category.id) > 0) {
+                _error.value = "Impossible de supprimer : des produits l'utilisent."
+                return@launch
+            }
+            db.categoryDao().softDelete(category.id)
         }
     }
 
@@ -64,7 +67,7 @@ class CategoriesViewModel(private val db: AppDatabase) : ViewModel() {
                 }
             }
             runCatching {
-                db.categoryDao().update(
+                db.categoryDao().save(
                     category.copy(
                         name = cleanedName,
                         nameEn = nameEn?.trim()?.takeIf { it.isNotEmpty() },

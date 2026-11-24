@@ -34,7 +34,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -197,13 +196,13 @@ private fun EditProductDialog(
     product: ProductWithCategory,
     categories: List<Category>,
     onDismiss: () -> Unit,
-    onConfirm: (barcode: String, categoryId: Long, priceCents: Int) -> Unit
+    onConfirm: (barcode: String, categoryId: String, priceCents: Int) -> Unit
 ) {
     var barcode by remember { mutableStateOf(product.product.barcode) }
     var priceText by remember {
         mutableStateOf("%d.%02d".format(product.product.priceCents / 100, product.product.priceCents % 100))
     }
-    var categoryId by remember { mutableLongStateOf(product.category.id) }
+    var categoryId by remember { mutableStateOf(product.category.id) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -233,7 +232,7 @@ private fun EditProductDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = barcode.isNotBlank() && categoryId != 0L && parseCents(priceText) != null,
+                enabled = barcode.isNotBlank() && categoryId.isNotEmpty() && parseCents(priceText) != null,
                 onClick = {
                     val cents = parseCents(priceText) ?: return@TextButton
                     onConfirm(barcode.trim(), categoryId, cents)
@@ -249,11 +248,11 @@ private fun EditProductDialog(
 private fun AddProductDialog(
     categories: List<Category>,
     onDismiss: () -> Unit,
-    onConfirm: (barcode: String, categoryId: Long, priceCents: Int) -> Unit
+    onConfirm: (barcode: String, categoryId: String, priceCents: Int) -> Unit
 ) {
     var barcode by remember { mutableStateOf("") }
     var priceText by remember { mutableStateOf("") }
-    var categoryId by remember { mutableLongStateOf(categories.firstOrNull()?.id ?: 0L) }
+    var categoryId by remember { mutableStateOf(categories.firstOrNull()?.id ?: "") }
 
     LaunchedEffect(Unit) {
         ScanEventBus.events.collect { scanned ->
@@ -299,7 +298,7 @@ private fun AddProductDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = barcode.isNotBlank() && categoryId != 0L && parseCents(priceText) != null,
+                enabled = barcode.isNotBlank() && categoryId.isNotEmpty() && parseCents(priceText) != null,
                 onClick = {
                     val cents = parseCents(priceText) ?: return@TextButton
                     onConfirm(barcode.trim(), categoryId, cents)
@@ -313,8 +312,8 @@ private fun AddProductDialog(
 @Composable
 private fun CategorySelector(
     categories: List<Category>,
-    selectedId: Long,
-    onSelected: (Long) -> Unit
+    selectedId: String,
+    onSelected: (String) -> Unit
 ) {
     if (categories.isEmpty()) {
         Text(

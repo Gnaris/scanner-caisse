@@ -3,8 +3,11 @@
 Application Android POS (point de vente) développée pour la boutique **Beli & Jolie**
 (Aubervilliers, 93). Tourne sur un **PDA Vanquisher RD50T** avec scanner intégré
 **Zebra SE4710** et imprime les tickets sur une **MUNBYN ITPP047** en Wi-Fi.
-Deux sous-projets dans ce repo :
+Trois sous-projets dans ce repo :
 - **`app/`** — app Android (Kotlin + Compose)
+- **`server/`** — API Node.js de synchronisation centrale (VPS,
+  https://caisse.beliandjolie.com) : catalogue, caisses, canaux et paramètres
+  boutique partagés entre tous les PDA, en mode « hors-ligne d'abord ».
 - **`pc-listener/`** — logiciel Windows (Python + Tkinter) qui réceptionne
   les exports CSV / JSON / Sage 50 envoyés par l'app via Wi-Fi, avec mise à
   jour auto depuis GitHub Releases.
@@ -14,10 +17,12 @@ Deux sous-projets dans ce repo :
 - **Kotlin 1.9.22** + **Jetpack Compose** (BOM 2024.02.00, Material 3)
 - **compileSdk 34**, **minSdk 26**, **targetSdk 34** (Android 15 sur le PDA)
 - **AGP 8.2.2**, **Gradle 8.2**, **JDK 17**
-- **Room 2.6.1** (SQLite catalogue produits/catégories) — schéma v5,
-  migrations destructives via `fallbackToDestructiveMigration()`
-- **DataStore Preferences 1.0.0** (paramètres + canaux persistés)
-- **kotlinx.serialization** (sérialisation JSON des canaux)
+- **Room 2.6.1** (SQLite : catalogue, caisses, canaux, lignes de panier,
+  paramètres partagés) — schéma **v7**, VRAIES migrations (5→6, 6→7) ;
+  destructive seulement depuis v1-4
+- **DataStore Preferences 1.0.0** (paramètres propres au PDA, caisse ouverte,
+  config + curseur de synchro)
+- **kotlinx.serialization** (reprise unique des anciens canaux JSON)
 - **DantSu/ESCPOS-ThermalPrinter-Android 3.3.0** (impression ESC/POS)
 - **ZXing 3.5.1** (génération des QR codes bitmap)
 - **Navigation Compose 2.7.7**
@@ -27,32 +32,62 @@ Deux sous-projets dans ce repo :
 ```
 MainActivity.kt          Scaffold + bottom nav (62 dp, labels sur 2 lignes
                          FR\n中文) + BroadcastReceiver
-ScannerApp.kt            Application : expose db, settingsStore, channelsRepo
+ScannerApp.kt            Application : expose db, settingsStore, session,
+                         channelsRepo, syncEngine. Démarre la synchro, capte
+                         le QR de config (BJSYNC|…) scanné depuis n'importe
+                         quel écran, lance la reprise unique des données v6.
 audio/
   ScanSounds.kt          ACK / NACK via ToneGenerator
 cart/
-  Channel.kt             Modèles sérialisables (Channel, CartLine, ChannelsState).
-                         CartLine porte 3 snapshots pour l'impression EN et
-                         l'export Sage : categoryNameEn, nameEn, sageArticleCode
-                         (tous nullable, défauts null → compat sérialisation).
-                         Channel porte discountPercent (0-100, défaut 0) :
-                         remise de caisse appliquée uniquement sur l'écran et
-                         le ticket imprimé — l'export reste sur les prix bruts.
-                         Helpers discountCents + totalCentsAfterDiscount.
-  ChannelsRepository.kt  Persistance DataStore des canaux (survit au reboot).
-                         addProductToActive propage les 3 snapshots EN/Sage.
-                         setActive accepte String? ; clearActive() annule le
-                         canal courant (utilisé à l'entrée de la liste).
-                         setDiscountInActive(percent) pour la remise.
+  Channel.kt             Modèles d'AFFICHAGE : Channel, CartLine (ligne
+                         regroupée par (catégorie, prix), clé `key`),
+                         ChannelsState. groupLines() regroupe les ajouts
+                         (CartLineEntity) en sommant les quantités ; snapshots
+                         EN/Sage = dernière valeur non nulle. Channel porte
+                         discountPercent (affichage + ticket seulement).
+  ChannelsRepository.kt  Canaux de la caisse ouverte, stockés dans Room.
+                         Chaque ajout = une ligne cart_lines distincte (deux PDA
+                         sur le même canal s'additionnent, jamais d'écrasement).
+                         Opérations par CartLine.key : remove / setQuantity /
+                         edit remplacent les ajouts du groupe par un seul.
+                         Canal actif en mémoire (non persisté).
+                         importLegacyChannels() : reprise unique de l'ancien
+                         JSON DataStore "channels" dans la 1re caisse ouverte.
 data/
-  AppDatabase.kt         Room DB "scanner.db" (v5, fallbackToDestructiveMigration)
-  SettingsStore.kt       AppSettings + DataStore. Champs scannerAction / scannerExtra
-                         toujours persistés mais plus éditables depuis l'UI.
-  dao/                   CategoryDao, ProductDao
-  entity/                Category : name (unique NOCASE) + nameEn (traduction
-                         EN pour ticket) + sageArticleCode (optionnel, Sage 50).
-                         Product : barcode (unique) + nameEn (override EN pour
-                         produit manuel). ProductWithCategory.
+  AppDatabase.kt         Room DB "scanner.db" v7. MIGRATION_6_7 : ids Long →
+                         UUID texte, colonnes de synchro, nouvelles tables.
+  Ids.kt                 newId() (UUID) + nowMs(). Toutes les tables ont
+                         updatedAt / deleted (suppression douce) / dirty
+                         (à envoyer). Les lectures filtrent deleted = 0 ;
+                         les écritures utilisateur passent par dao.save()
+                         (horodate + dirty), la synchro par upsertRaw().
+  SettingsStore.kt       AppSettings = paramètres PARTAGÉS (table Room
+                         `settings` : nom, adresse, QR, URLs, code Sage manuel)
+                         + paramètres DU PDA (DataStore : imprimante, scanner,
+                         URL export PC). update() n'écrit que les champs
+                         partagés modifiés.
+  DeviceSession.kt       Caisse ouverte sur ce PDA (« Appareil N », pas une
+                         authentification) + installId du PDA physique.
+                         deleteDevice() supprime aussi ses canaux.
+  dao/                   CategoryDao, ProductDao, DeviceDao, ChannelDao
+                         (canaux + lignes), SettingDao, SyncDao (requêtes de
+                         synchro, voient aussi les lignes supprimées).
+  entity/                Category, Product (plus d'index UNIQUE ni de FK :
+                         unicité vérifiée par le code + garantie par le
+                         serveur), Device, ChannelEntity, CartLineEntity,
+                         SharedSetting, ProductWithCategory.
+sync/
+  SyncEngine.kt          Synchro hors-ligne d'abord. push (lignes dirty →
+                         POST /v1/sync/push) puis pull (GET /v1/sync/pull
+                         ?since=N par pages). Applique remaps (doublons
+                         fusionnés par le serveur) et overrides. Déclencheurs :
+                         1,5 s après une modif locale, toutes les 30 s, retour
+                         réseau. Config (URL + clé) en DataStore "sync",
+                         saisie par scan du QR `BJSYNC|<url>|<clé>`.
+  SyncTables.kt          Conversion entité ↔ JSON par table (mêmes noms de
+                         champs que server/src/entities.js).
+  SyncUi.kt              SyncStatusChip (pastille d'état, tap = synchro),
+                         SyncSettingsSection, SyncConfigDialog.
 scanner/
   ScanEventBus.kt        SharedFlow<String> global de scans
   ScanReceiver.kt        BroadcastReceiver, action configurable, extra auto-découvert
@@ -145,6 +180,12 @@ ui/
                          Backspace long-press = suppression en chaîne (400ms puis
                          50ms/tick, via rememberUpdatedState pour éviter stale
                          closures).
+  device/
+    DevicePickerScreen.kt  Écran « Quelle caisse ? » affiché tant qu'aucune
+                         caisse n'est ouverte (MainActivity.AppRoot) : liste
+                         déroulante + Ouvrir / Ajouter / Supprimer + accès
+                         config synchro. « Changer de caisse » en haut de la
+                         liste des canaux y ramène.
   checkout/
     ChannelsListScreen.kt  Nouvel écran "liste des canaux" = point d'entrée
                          de l'onglet Canal. Header : gros bouton vert
@@ -252,8 +293,9 @@ res/
 - **Tri sur ticket & caisse** : groupé par catégorie (ordre par prix mini croissant
   dans chaque catégorie), lignes triées par prix ascendant à l'intérieur.
 - **Alternance gras** : une catégorie sur deux en gras pour la lisibilité.
-- **Canaux** : plusieurs paniers parallèles persistés dans DataStore. Impression
-  ne ferme PAS le canal (fermeture manuelle via ✕).
+- **Canaux** : plusieurs paniers parallèles par caisse, stockés dans Room et
+  synchronisés (une caisse peut être ouverte sur plusieurs PDA à la fois).
+  Impression ne ferme PAS le canal (fermeture manuelle via ✕).
 - **Format colonnes ticket** : `Cat 18 + Qt 4 + P.U. 8 + HT 9` (= 42 chars internes
   + 2 × 3 chars padding = 48 chars). Pas de colonnes TVA / TTC par ligne — elles
   n'apparaissent qu'en ligne de résumé en bas. Quantité préfixée `x` (ex. `x3`),
@@ -277,9 +319,11 @@ res/
 
 ## Unicité produits & catégories
 
-- **Catégorie unique par nom** (NOCASE) : index Room `@Index(unique = true)` sur
-  `Category.name`. `CategoryDao.findByName(name)` pour pré-check côté UI.
-- **Produit unique par barcode** : index déjà en place depuis v1. `createCategory`
+- **Catégorie unique par nom** (NOCASE) : vérifiée par le code
+  (`CategoryDao.findByName`, lignes non supprimées) — plus d'index UNIQUE Room
+  depuis v7. Entre appareils, le serveur fusionne les doublons (même nom,
+  casse ignorée) et renvoie un remap ; la ligne existante garde son nom.
+- **Produit unique par barcode** : même principe (code + fusion serveur). `createCategory`
   dans CheckoutViewModel renvoie l'id d'une catégorie existante si le nom match
   (pas de prompt d'erreur, création silencieuse). `createAndAddToCart` : si le
   barcode existe déjà, ajoute l'existant au canal au lieu de créer un doublon.
@@ -408,6 +452,38 @@ Android apparaît automatiquement une fois le téléchargement terminé.
 **NB** : Android oblige à passer par le prompt système d'install (pas de
 MAJ silencieuse possible sans Device Owner, qu'on n'a pas configuré pour
 rester simple sur ce PDA unique).
+
+## server/ — API de synchronisation (Node.js, VPS)
+
+- **Stack** : Node 20, Fastify 5, mysql2. Pas de build. Tests d'intégration
+  `node --test` sur une vraie base MySQL (`TEST_DB_NAME` doit finir par `_test`).
+- **Hébergement** : VPS Hostinger partagé avec le site beliandjolie.com
+  (infos dans `C:\Users\Admin\Desktop\beli-jolie\CLAUDE.md`). Service
+  ISOLÉ : dossier `/var/www/scanner-caisse`, base `scanner_caisse` (+
+  `scanner_caisse_test`) avec utilisateur MySQL dédié, process PM2
+  `scanner-caisse` sur 127.0.0.1:3100, vhost Nginx
+  `caisse.beliandjolie.com` + certificat Certbot. **Ne jamais redémarrer le
+  process PM2 `beliandjolie`.**
+- **Fichiers** : `src/entities.js` (source unique : tables, champs, clés
+  d'unicité → schéma, validation, JSON), `src/sync.js` (push / pull),
+  `src/server.js` (routes + auth Bearer), `src/main.js` (point d'entrée PM2),
+  `src/migrate.js` (CREATE TABLE IF NOT EXISTS, lancé à chaque démarrage).
+- **Routes** : `GET /v1/health` (sans clé), `GET /v1/ping`,
+  `POST /v1/sync/push {origin, changes:{table:[rows]}}` →
+  `{version, remaps, overrides, rejected}`, `GET /v1/sync/pull?since=N` →
+  `{version, hasMore, reset, changes}` (tranches de 1000 versions).
+- **Règles** : version globale croissante (envois sérialisés par verrou sur
+  `sync_state`) ; `updatedAt` le plus récent gagne ; doublons (nom de
+  caisse / de catégorie casse ignorée, code-barres) fusionnés via la table
+  `aliases` (remap renvoyé à l'appareil, la ligne existante garde ses
+  valeurs, le doublon complète les champs vides) ; suppressions douces ;
+  enregistrement invalide refusé sans bloquer le reste.
+- **Déployer** : `cd server && bash deploy/deploy.sh` (envoie le code, lance
+  les tests sur le VPS, migre, `pm2 startOrReload` du seul process
+  scanner-caisse, health check).
+- Ajouter un champ synchronisé = l'ajouter dans `server/src/entities.js`
+  (+ ALTER TABLE manuel, migrate.js ne fait que CREATE IF NOT EXISTS), dans
+  l'entité Room (+ Migration) et dans `sync/SyncTables.kt`.
 
 ## pc-listener (Python / Windows)
 
@@ -614,11 +690,19 @@ PyInstaller). Logs dans `%APPDATA%\ScannerListener\listener.log`.
 - **Erreurs réseau humanisées** via `Throwable.toHumanMessage(context)` qui
   détecte en plus si le Wi-Fi est tombé via `ConnectivityManager` → message
   explicite "📶 Wi-Fi non connecté" au lieu de "ConnectException" opaque.
-- **Migration Room destructive** (`fallbackToDestructiveMigration`) car app
-  jeune, catalogue reconstructible à la main. Dernière bump : v4 → v5 lors
-  de l'ajout de `Category.nameEn`, `Category.sageArticleCode`, `Product.nameEn`.
-  Si tu bumpes à v6+ avec un schéma plus mature, remplace par de vraies
-  migrations.
+- **Migrations Room réelles depuis v6** : 5→6 (barcodePrefix), 6→7 (UUID +
+  synchro, testée sur émulateur depuis la 1.0.22 avec catalogue + canal en
+  cours). Destructive uniquement depuis v1-4. Toute nouvelle version DOIT
+  avoir sa Migration : le catalogue est partagé, le perdre sur un PDA le
+  ferait renvoyer vide. Après un changement d'entité, comparer la SQL de la
+  migration avec `AppDatabase_Impl.createAllTables` (build/generated/ksp).
+- **Synchronisation centrale (remplace la synchro QR PDA↔PDA, supprimée)** :
+  base locale = source de vérité pour l'UI (tout marche hors Wi-Fi) ; serveur
+  = point de rencontre. Conflit sur une même ligne : `updatedAt` le plus
+  récent gagne. Paramètres partagés vs propres au PDA : voir SettingsStore.
+  L'IP imprimante reste par PDA (décision produit). La clé API n'est JAMAIS
+  dans le code (repo public) : elle est dans `/var/www/scanner-caisse/.env`
+  sur le VPS et se transmet aux PDA par le QR `BJSYNC|<url>|<clé>`.
 - **Signature release + auto-update via GitHub Releases** : keystore unique
   `app/belijolie-release.jks` (validité 10000 jours), credentials dans
   `keystore.properties` (git-ignored). `build.gradle.kts` lit la config via

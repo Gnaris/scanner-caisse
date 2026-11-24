@@ -9,6 +9,8 @@ import com.belijolie.scanner.cart.ChannelsRepository
 import com.belijolie.scanner.cart.ChannelsState
 import com.belijolie.scanner.data.AppDatabase
 import com.belijolie.scanner.data.AppSettings
+import com.belijolie.scanner.data.DeviceSession
+import com.belijolie.scanner.data.entity.Device
 import com.belijolie.scanner.data.SettingsStore
 import com.belijolie.scanner.data.entity.Category
 import com.belijolie.scanner.data.entity.Product
@@ -19,6 +21,7 @@ import com.belijolie.scanner.export.ExportFormat
 import com.belijolie.scanner.printer.EscPosPrinter
 import com.belijolie.scanner.printer.TicketLang
 import com.belijolie.scanner.scanner.ScanEventBus
+import com.belijolie.scanner.sync.SyncEngine
 import com.belijolie.scanner.util.toHumanMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -41,7 +44,7 @@ data class PrintResult(val success: Boolean, val message: String)
  * continuer à référencer le produit DB existant.
  */
 data class LastScan(
-    val productId: Long,
+    val productId: String?,
     val barcode: String,
     val categoryName: String,
     val priceCents: Int,
@@ -54,8 +57,18 @@ data class LastScan(
 class CheckoutViewModel(
     private val channelsRepo: ChannelsRepository,
     private val settingsStore: SettingsStore,
-    private val db: AppDatabase
+    private val db: AppDatabase,
+    private val session: DeviceSession,
 ) : ViewModel() {
+
+    /** Caisse ouverte (nom affiché en haut de la liste des canaux). */
+    val currentDevice: StateFlow<Device?> = session.currentDevice
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Ferme la caisse → retour à l'écran de choix. */
+    fun leaveDevice() {
+        viewModelScope.launch { session.leave() }
+    }
 
     val state: StateFlow<ChannelsState> = channelsRepo.state
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChannelsState())
@@ -120,6 +133,8 @@ class CheckoutViewModel(
     private suspend fun handleScan(barcode: String) {
         // Ignore duplicate scans while the "unknown product" sheet is open.
         if (_unknownBarcode.value != null) return
+        // QR de configuration de la synchro : traité par ScannerApp, pas un produit.
+        if (SyncEngine.isConfigScan(barcode)) return
 
         val st = channelsRepo.current()
         // N'intervient que si ce VM est bien celui du canal courant. Évite
@@ -173,7 +188,7 @@ class CheckoutViewModel(
         name: String,
         nameEn: String?,
         sageArticleCode: String?,
-        onCreated: (Long) -> Unit,
+        onCreated: (String) -> Unit,
     ) {
         viewModelScope.launch {
             val cleaned = name.trim()
@@ -183,16 +198,13 @@ class CheckoutViewModel(
                 onCreated(existing.id)
                 return@launch
             }
-            val id = runCatching {
-                db.categoryDao().insert(
-                    Category(
-                        name = cleaned,
-                        nameEn = nameEn?.trim()?.takeIf { it.isNotEmpty() },
-                        sageArticleCode = sageArticleCode?.trim()?.takeIf { it.isNotEmpty() },
-                    )
-                )
-            }.getOrNull() ?: return@launch
-            onCreated(id)
+            val category = Category(
+                name = cleaned,
+                nameEn = nameEn?.trim()?.takeIf { it.isNotEmpty() },
+                sageArticleCode = sageArticleCode?.trim()?.takeIf { it.isNotEmpty() },
+            )
+            runCatching { db.categoryDao().save(category) }.getOrNull() ?: return@launch
+            onCreated(category.id)
         }
     }
 
@@ -233,7 +245,7 @@ class CheckoutViewModel(
      * sheet when the user picks "Create". Si un produit avec ce code-barre
      * existe déjà, on le prend tel quel (pas de doublon ni d'erreur).
      */
-    fun createAndAddToCart(barcode: String, categoryId: Long, priceCents: Int) {
+    fun createAndAddToCart(barcode: String, categoryId: String, priceCents: Int) {
         viewModelScope.launch {
             val cleanedBarcode = barcode.trim()
             if (cleanedBarcode.isEmpty()) return@launch
@@ -254,14 +266,12 @@ class CheckoutViewModel(
                 return@launch
             }
 
-            val id = runCatching {
-                db.productDao().insert(
-                    Product(barcode = cleanedBarcode, categoryId = categoryId, priceCents = priceCents)
-                )
-            }.getOrElse {
-                _printResult.value = PrintResult(false, "Impossible de créer le produit : code-barre déjà utilisé.")
+            val newProduct = Product(barcode = cleanedBarcode, categoryId = categoryId, priceCents = priceCents)
+            runCatching { db.productDao().save(newProduct) }.getOrElse {
+                _printResult.value = PrintResult(false, "Impossible de créer le produit.")
                 return@launch
             }
+            val id = newProduct.id
             val category = db.categoryDao().getById(categoryId) ?: return@launch
             channelsRepo.addProductToActive(
                 productId = id,
@@ -289,7 +299,7 @@ class CheckoutViewModel(
      * the database — the scanned barcode stays unassociated). Called from
      * the "unknown product" sheet when the user picks "Choose from list".
      */
-    fun addExistingToCart(productId: Long) {
+    fun addExistingToCart(productId: String) {
         viewModelScope.launch {
             val product = existingProducts.value.firstOrNull { it.product.id == productId } ?: return@launch
             channelsRepo.addProductToActive(
@@ -387,7 +397,7 @@ class CheckoutViewModel(
             }
             if (oldLine != null) {
                 channelsRepo.setLineQuantityInActive(
-                    oldLine.productId,
+                    oldLine.key,
                     oldLine.quantity - last.quantity,
                 )
             }
@@ -422,8 +432,8 @@ class CheckoutViewModel(
         viewModelScope.launch { channelsRepo.closeChannel(id) }
     }
 
-    fun removeLine(productId: Long) {
-        viewModelScope.launch { channelsRepo.removeLineFromActive(productId) }
+    fun removeLine(key: String) {
+        viewModelScope.launch { channelsRepo.removeLineFromActive(key) }
     }
 
     /**
@@ -431,13 +441,13 @@ class CheckoutViewModel(
      * Les métadonnées EN / Sage sont récupérées depuis la DB si la nouvelle
      * catégorie y existe ; sinon on garde les snapshots existants.
      */
-    fun editLine(productId: Long, newCategoryName: String, newPriceCents: Int, newQuantity: Int) {
+    fun editLine(key: String, newCategoryName: String, newPriceCents: Int, newQuantity: Int) {
         val cleaned = newCategoryName.trim()
         if (cleaned.isEmpty()) return
         viewModelScope.launch {
             val newCat = db.categoryDao().findByName(cleaned)
             channelsRepo.editLineInActive(
-                productId = productId,
+                key = key,
                 newCategoryName = cleaned,
                 newPriceCents = newPriceCents,
                 newQuantity = newQuantity.coerceAtLeast(1),
@@ -480,9 +490,8 @@ class CheckoutViewModel(
             val matched = db.categoryDao().getAll().firstOrNull {
                 normalizeForMatch(it.name) == normalizeForMatch(cleanedCat)
             }
-            val manualProductId = -System.currentTimeMillis()
             channelsRepo.addProductToActive(
-                productId = manualProductId,
+                productId = null,
                 barcode = "",
                 categoryName = cleanedCat,
                 priceCents = priceCents,
@@ -493,7 +502,7 @@ class CheckoutViewModel(
             )
             ScanSounds.playFound()
             _lastScan.value = LastScan(
-                productId = manualProductId,
+                productId = null,
                 barcode = "",
                 categoryName = cleanedCat,
                 priceCents = priceCents,
@@ -526,7 +535,6 @@ class CheckoutViewModel(
             }
             _isPrinting.value = false
             if (result.isSuccess) {
-                channelsRepo.bumpTicketNumber()
                 // Ticket imprimé → le dernier scan n'est plus modifiable.
                 _lastScan.value = null
                 _printResult.value = PrintResult(true, ctx.getString(R.string.checkout_ticket_printed))
@@ -542,7 +550,7 @@ class CheckoutViewModel(
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             val app = ScannerApp.instance
             @Suppress("UNCHECKED_CAST")
-            return CheckoutViewModel(app.channelsRepo, app.settingsStore, app.db) as T
+            return CheckoutViewModel(app.channelsRepo, app.settingsStore, app.db, app.session) as T
         }
     }
 }

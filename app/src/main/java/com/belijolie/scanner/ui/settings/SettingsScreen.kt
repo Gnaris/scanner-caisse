@@ -33,10 +33,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.belijolie.scanner.R
 import com.belijolie.scanner.ScannerApp
 import com.belijolie.scanner.data.AppSettings
-import com.belijolie.scanner.sync.QrCodec
-import com.belijolie.scanner.sync.SyncExportDialog
-import com.belijolie.scanner.sync.SyncImportDialog
-import com.belijolie.scanner.sync.SyncManager
 import com.belijolie.scanner.ui.keyboard.AppTextField
 import com.belijolie.scanner.ui.keyboard.KeyboardMode
 import com.belijolie.scanner.update.UpdateState
@@ -196,9 +192,9 @@ fun SettingsScreen(
         )
 
         Spacer(Modifier.height(24.dp))
-        SectionHeader(stringResource(R.string.sync_section_title))
+        SectionHeader(stringResource(R.string.sync_title))
         Spacer(Modifier.height(8.dp))
-        SyncSection(snackbar = snackbar)
+        com.belijolie.scanner.sync.SyncSettingsSection()
 
         Spacer(Modifier.height(24.dp))
         SectionHeader(stringResource(R.string.update_section_title))
@@ -295,93 +291,6 @@ fun SettingsScreen(
 @Composable
 private fun SectionHeader(text: String) {
     Text(text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-}
-
-/**
- * Section "Synchronisation" du Settings. 2 boutons :
- *  - Exporter : lit DB + settings → encode en segments QR → affiche le diaporama.
- *  - Importer : lance le dialog scan caméra qui gère tout le flow jusqu'au merge.
- * Résultat affiché via le snackbar partagé avec le reste de l'écran.
- */
-@Composable
-private fun SyncSection(snackbar: SnackbarHostState) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = rememberCoroutineScope()
-    var exportSegments by remember { mutableStateOf<List<String>?>(null) }
-    var showImport by remember { mutableStateOf(false) }
-    var exporting by remember { mutableStateOf(false) }
-
-    Text(
-        stringResource(R.string.sync_section_hint),
-        fontSize = 12.sp,
-        color = androidx.compose.ui.graphics.Color(0xFF6B7280),
-    )
-    Spacer(Modifier.height(10.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Button(
-            onClick = {
-                exporting = true
-                scope.launch {
-                    val app = ScannerApp.instance
-                    runCatching {
-                        val snapshot = SyncManager(app.db, app.settingsStore).exportSnapshot()
-                        QrCodec.encodeToSegments(snapshot)
-                    }.onSuccess { segments ->
-                        exportSegments = segments
-                    }.onFailure {
-                        snackbar.showSnackbar(it.message ?: "Erreur export")
-                    }
-                    exporting = false
-                }
-            },
-            enabled = !exporting,
-            modifier = Modifier.weight(1f).height(60.dp),
-        ) {
-            Text(
-                stringResource(R.string.sync_export_button),
-                maxLines = 2,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                lineHeight = 14.sp,
-                fontSize = 12.sp,
-            )
-        }
-        OutlinedButton(
-            onClick = { showImport = true },
-            modifier = Modifier.weight(1f).height(60.dp),
-        ) {
-            Text(
-                stringResource(R.string.sync_import_button),
-                maxLines = 2,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                lineHeight = 14.sp,
-                fontSize = 12.sp,
-            )
-        }
-    }
-
-    exportSegments?.let { segs ->
-        SyncExportDialog(
-            segments = segs,
-            onDismiss = { exportSegments = null },
-        )
-    }
-
-    if (showImport) {
-        SyncImportDialog(
-            onDismiss = { showImport = false },
-            onImported = { result ->
-                scope.launch {
-                    snackbar.showSnackbar(
-                        context.getString(
-                            R.string.sync_imported,
-                            result.categoriesInserted + result.categoriesUpdated,
-                            result.productsInserted + result.productsUpdated,
-                        )
-                    )
-                }
-            },
-        )
-    }
 }
 
 /**

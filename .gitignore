@@ -29,3 +29,7 @@ keystore.properties
 
 # VS Code (préférences IDE locales)
 .vscode/
+
+# Serveur de synchro (Node)
+server/node_modules/
+server/.env

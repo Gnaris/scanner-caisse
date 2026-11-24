@@ -47,6 +47,8 @@ import kotlinx.coroutines.runBlocking
 import com.belijolie.scanner.ui.categories.CategoriesScreen
 import com.belijolie.scanner.ui.checkout.ChannelDetailScreen
 import com.belijolie.scanner.ui.checkout.ChannelsListScreen
+import com.belijolie.scanner.ui.device.DevicePickerScreen
+import kotlinx.coroutines.flow.map
 import com.belijolie.scanner.ui.products.ProductsScreen
 import com.belijolie.scanner.ui.settings.SettingsScreen
 import com.belijolie.scanner.ui.theme.ScannerTheme
@@ -125,6 +127,17 @@ private fun AppRoot() {
             state = updateState,
             onDismiss = { updateManager.reset() },
         )
+    }
+
+    // Aucune caisse ouverte sur ce PDA (1er lancement, « Changer de caisse »,
+    // ou caisse supprimée depuis un autre appareil) → écran de choix.
+    val session = ScannerApp.instance.session
+    val gate by remember { session.currentDevice.map { DeviceGate(loaded = true, open = it != null) } }
+        .collectAsStateWithLifecycle(DeviceGate(loaded = false, open = false))
+    if (!gate.loaded) return
+    if (!gate.open) {
+        DevicePickerScreen()
+        return
     }
 
     Scaffold(
@@ -215,6 +228,8 @@ private fun AppRoot() {
         }
     }
 }
+
+private data class DeviceGate(val loaded: Boolean, val open: Boolean)
 
 /**
  * Splash plein écran affiché au tout démarrage pendant que l'app vérifie si

@@ -30,7 +30,7 @@ class ProductsViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    fun add(barcode: String, categoryId: Long, priceCents: Int) {
+    fun add(barcode: String, categoryId: String, priceCents: Int) {
         viewModelScope.launch {
             val cleaned = barcode.trim()
             if (cleaned.isEmpty()) return@launch
@@ -40,17 +40,17 @@ class ProductsViewModel(
                 return@launch
             }
             runCatching {
-                db.productDao().insert(
+                db.productDao().save(
                     Product(barcode = cleaned, categoryId = categoryId, priceCents = priceCents)
                 )
             }.onFailure {
-                _error.value = "Impossible d'ajouter : code-barres déjà utilisé."
+                _error.value = "Impossible d'ajouter ce produit."
             }
         }
     }
 
     fun delete(product: Product) {
-        viewModelScope.launch { db.productDao().deleteById(product.id) }
+        viewModelScope.launch { db.productDao().softDelete(product.id) }
     }
 
     /**
@@ -61,12 +61,12 @@ class ProductsViewModel(
     fun update(
         product: Product,
         newBarcode: String,
-        newCategoryId: Long,
+        newCategoryId: String,
         newPriceCents: Int,
     ) {
         viewModelScope.launch {
             val cleaned = newBarcode.trim()
-            if (cleaned.isEmpty() || newCategoryId == 0L) return@launch
+            if (cleaned.isEmpty() || newCategoryId.isEmpty()) return@launch
             if (!cleaned.equals(product.barcode, ignoreCase = true)) {
                 val existing = db.productDao().findByBarcode(cleaned)
                 if (existing != null && existing.product.id != product.id) {
@@ -75,7 +75,7 @@ class ProductsViewModel(
                 }
             }
             runCatching {
-                db.productDao().update(
+                db.productDao().save(
                     product.copy(
                         barcode = cleaned,
                         categoryId = newCategoryId,

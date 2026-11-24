@@ -1,34 +1,39 @@
 package com.belijolie.scanner.data.dao
 
 import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Update
+import androidx.room.Upsert
 import com.belijolie.scanner.data.entity.Category
+import com.belijolie.scanner.data.nowMs
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface CategoryDao {
+abstract class CategoryDao {
 
-    @Query("SELECT * FROM categories ORDER BY name COLLATE NOCASE")
-    fun observeAll(): Flow<List<Category>>
+    @Query("SELECT * FROM categories WHERE deleted = 0 ORDER BY name COLLATE NOCASE")
+    abstract fun observeAll(): Flow<List<Category>>
 
-    @Query("SELECT * FROM categories ORDER BY name COLLATE NOCASE")
-    suspend fun getAll(): List<Category>
+    @Query("SELECT * FROM categories WHERE deleted = 0 ORDER BY name COLLATE NOCASE")
+    abstract suspend fun getAll(): List<Category>
 
-    @Query("SELECT * FROM categories WHERE id = :id")
-    suspend fun getById(id: Long): Category?
+    @Query("SELECT * FROM categories WHERE id = :id AND deleted = 0")
+    abstract suspend fun getById(id: String): Category?
 
-    @Query("SELECT * FROM categories WHERE name = :name COLLATE NOCASE LIMIT 1")
-    suspend fun findByName(name: String): Category?
+    @Query("SELECT * FROM categories WHERE name = :name COLLATE NOCASE AND deleted = 0 LIMIT 1")
+    abstract suspend fun findByName(name: String): Category?
 
-    @Insert(onConflict = OnConflictStrategy.ABORT)
-    suspend fun insert(category: Category): Long
+    @Query("SELECT COUNT(*) FROM products WHERE categoryId = :categoryId AND deleted = 0")
+    abstract suspend fun countProducts(categoryId: String): Int
 
-    @Update
-    suspend fun update(category: Category)
+    /** Écriture brute (synchro). Pour une modif utilisateur, passer par [save]. */
+    @Upsert
+    abstract suspend fun upsertRaw(category: Category)
 
-    @Query("DELETE FROM categories WHERE id = :id")
-    suspend fun deleteById(id: Long)
+    /** Enregistre une modification locale : horodatée et marquée « à envoyer ». */
+    open suspend fun save(category: Category) {
+        upsertRaw(category.copy(updatedAt = nowMs(), dirty = true))
+    }
+
+    @Query("UPDATE categories SET deleted = 1, dirty = 1, updatedAt = :now WHERE id = :id")
+    abstract suspend fun softDelete(id: String, now: Long = nowMs())
 }

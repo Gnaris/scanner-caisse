@@ -66,6 +66,7 @@ fun ChannelsListScreen(
     onOpenChannel: (String) -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val currentDevice by vm.currentDevice.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var channelToRename by remember { mutableStateOf<Channel?>(null) }
     var channelToClose by remember { mutableStateOf<Channel?>(null) }
@@ -90,6 +91,29 @@ fun ChannelsListScreen(
                 event.nativeKeyEvent.keyCode != android.view.KeyEvent.KEYCODE_BACK
             }
     ) {
+        // Caisse ouverte + accès au choix de caisse
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 14.dp, end = 6.dp, top = 6.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    currentDevice?.name.orEmpty(),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF111827),
+                    maxLines = 1,
+                )
+                Spacer(Modifier.height(2.dp))
+                com.belijolie.scanner.sync.SyncStatusChip()
+            }
+            TextButton(onClick = { vm.leaveDevice() }) {
+                Text(stringResource(R.string.device_switch), fontSize = 12.sp)
+            }
+        }
+
         Button(
             onClick = {
                 if (isCreating) return@Button
